@@ -42,7 +42,7 @@ export default function DashboardPage() {
   const [searchInput, setSearchInput] = useState("")
   const [sort, setSort] = useState("downloads")
   const loadMoreRef = useRef<HTMLDivElement>(null)
-  const searchTimeout = useRef<ReturnType<typeof setTimeout>>()
+  const searchTimeout = useRef<ReturnType<typeof setTimeout>>(null)
 
   // Load preferences
   useEffect(() => {
@@ -59,7 +59,7 @@ export default function DashboardPage() {
     params.set("offset", String(offset))
     params.set("sort", sort)
     if (searchInput) params.set("q", searchInput)
-    if (filters.pipeline_tag) params.set("pipeline_tag", filters.pipeline_tag)
+    if (filters.tasks[0]) params.set("pipeline_tag", filters.tasks[0])
     if (filters.sizeMinGB !== null) params.set("sizeMin", String(filters.sizeMinGB))
     if (filters.sizeMaxGB !== null) params.set("sizeMax", String(filters.sizeMaxGB))
     if (filters.paramMinB !== null) params.set("paramMin", String(filters.paramMinB))
@@ -135,8 +135,8 @@ export default function DashboardPage() {
     }
   }, [state.loading, state.hasMore, state.models.length])
 
-  const handleSortChange = (value: string) => {
-    setSort(value)
+  const handleSortChange = (value: string | null) => {
+    if (value) setSort(value)
   }
 
   if (!mounted) return (
@@ -165,9 +165,9 @@ export default function DashboardPage() {
               </div>
               <span className="font-bold text-sm hidden sm:inline">ModelDB</span>
             </div>
-
+            {/* Mobile filter */}
             <Sheet>
-              <SheetTrigger asChild>
+              <SheetTrigger>
                 <Button variant="outline" size="sm" className="xl:hidden gap-1.5 shrink-0">
                   <Filter className="w-3.5 h-3.5" />
                   Filters
@@ -216,7 +216,7 @@ export default function DashboardPage() {
               </Button>
             </div>
 
-            <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
+            <Button variant="ghost" size="sm" className="h-8 w-8 p-0 shrink-0" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
               {theme === "dark" ? "🌙" : "☀️"}
             </Button>
           </div>

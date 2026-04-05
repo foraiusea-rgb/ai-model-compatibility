@@ -33,7 +33,7 @@ export interface HFModelResponse {
     metrics?: string[];
     mask_token?: string;
     widget?: any[];
-    model-index?: any[];
+    modelIndex?: any[];
     co2_eq?: {
       emissions: number | { emissions: number };
     };
@@ -52,7 +52,7 @@ export interface HFModelResponse {
   }>;
   config?: {
     architectures?: string[];
-    model_type?: string;
+    modelType?: string;
   };
 }
 
@@ -81,7 +81,7 @@ function getHeaders(): Record<string, string> {
     "Content-Type": "application/json",
   };
   if (HF_TOKEN) {
-    headers["Authorization"] = `Bearer ${HF_TOKEN}`;
+    headers["Authorization"] = "Bearer " + HF_TOKEN;
   }
   return headers;
 }
@@ -101,7 +101,7 @@ export async function searchHFModels(params: HFSearchParams = {}): Promise<HFSea
     tags,
   } = params;
 
-  const url = new URL(`${HF_API_BASE}/models`);
+  const url = new URL(HF_API_BASE + "/models");
   url.searchParams.set("limit", String(limit));
   url.searchParams.set("offset", String(offset));
   url.searchParams.set("sort", sort);
@@ -126,14 +126,12 @@ export async function searchHFModels(params: HFSearchParams = {}): Promise<HFSea
   });
 
   if (!response.ok) {
-    throw new Error(`HF API error: ${response.status} ${response.statusText}`);
+    throw new Error("HF API error: " + response.status + " " + response.statusText);
   }
 
-  // The HF API returns total count in the Link header or as a header
   const totalHeader = response.headers.get("x-total-count") || "0";
   const total = parseInt(totalHeader, 10) || 0;
 
-  // If x-total-count is not available, estimate based on offset + returned
   const models: HFModelResponse[] = await response.json();
 
   return {
@@ -145,7 +143,7 @@ export async function searchHFModels(params: HFSearchParams = {}): Promise<HFSea
 
 export async function getHFModel(modelId: string): Promise<HFModelResponse | null> {
   const encodedId = encodeURIComponent(modelId);
-  const url = `${HF_API_BASE}/models/${encodedId}`;
+  const url = HF_API_BASE + "/models/" + encodedId;
 
   const response = await fetch(url, {
     headers: getHeaders(),
@@ -154,15 +152,14 @@ export async function getHFModel(modelId: string): Promise<HFModelResponse | nul
 
   if (response.status === 404) return null;
   if (!response.ok) {
-    throw new Error(`HF API error: ${response.status} ${response.statusText}`);
+    throw new Error("HF API error: " + response.status + " " + response.statusText);
   }
 
   return response.json();
 }
 
 export async function getHFModelCount(): Promise<number> {
-  // Fetch just 1 model to get the total count from header
-  const response = await fetch(`${HF_API_BASE}/models?limit=1`, {
+  const response = await fetch(HF_API_BASE + "/models?limit=1", {
     headers: getHeaders(),
     method: "HEAD",
   });
@@ -171,22 +168,11 @@ export async function getHFModelCount(): Promise<number> {
   return total ? parseInt(total, 10) : 0;
 }
 
-/**
- * Extract estimated parameter count from HF model response.
- * Returns value in billions (e.g., 7.2 for 7.2B params).
- */
 export function extractParamCount(model: HFModelResponse): number | null {
-  // From safetensors metadata
-  if (model.safetensors?.total) {
+  if (model.safetensors && model.safetensors.total) {
     return Math.round((model.safetensors.total / 1e9) * 100) / 100;
   }
 
-  // From card data if available
-  if (model.cardData) {
-    // No direct param count in card data
-  }
-
-  // From model ID naming conventions
   const id = model.id.toLowerCase();
   const match = id.match(/(\d+\.?\d*)[bm]/);
   if (match) {
@@ -199,10 +185,7 @@ export function extractParamCount(model: HFModelResponse): number | null {
   return null;
 }
 
-/**
- * Extract estimated file size from model siblings.
- */
-export function extractModelSize(model: HFModelResponse): { totalGB: number; files: number } | null {
+export function extractModelSize(model: HFModelResponse) {
   if (!model.siblings || model.siblings.length === 0) return null;
 
   const totalBytes = model.siblings.reduce((sum, s) => sum + (s.size || 0), 0);
@@ -214,16 +197,14 @@ export function extractModelSize(model: HFModelResponse): { totalGB: number; fil
   };
 }
 
-/**
- * Convert HF API response to our internal model format.
- */
 export function hfToInternal(hfModel: HFModelResponse) {
   const paramCount = extractParamCount(hfModel);
   const sizeInfo = extractModelSize(hfModel);
   
-  const license = Array.isArray(hfModel.cardData?.license)
-    ? hfModel.cardData.license.join(", ")
-    : hfModel.cardData?.license || null;
+  const cardData = hfModel.cardData;
+  const license = cardData && Array.isArray(cardData.license)
+    ? (cardData.license as string[]).join(", ")
+    : (cardData && cardData.license) || null;
 
   return {
     modelId: hfModel.id,
@@ -231,16 +212,16 @@ export function hfToInternal(hfModel: HFModelResponse) {
     name: hfModel.id.split("/").pop() || hfModel.id,
     pipeline_tag: hfModel.pipeline_tag,
     taskId: hfModel.pipeline_tag,
-    libraryName: hfModel.cardData?.library_name || null,
+    libraryName: (hfModel.cardData && hfModel.cardData.library_name) || null,
     tags: hfModel.tags || [],
     downloads: hfModel.downloads,
     likes: hfModel.likes,
-    createdAt: hfModel.lastModified, // HF API only gives lastModified for free
+    createdAt: hfModel.lastModified,
     updatedAt: hfModel.lastModified,
     paramCount,
-    estimatedSizeGB: sizeInfo?.totalGB,
+    estimatedSizeGB: sizeInfo ? sizeInfo.totalGB : null,
     quantization: null,
-    format: hfModel.safetensors ? "safetensors" : hfModel.cardData?.library_name || null,
+    format: hfModel.safetensors ? "safetensors" : (hfModel.cardData && hfModel.cardData.library_name) || null,
     contextLength: null,
     license,
     trendingScore: Math.round(Math.log(hfModel.downloads + 1) * 10),
