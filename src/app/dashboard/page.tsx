@@ -11,11 +11,15 @@ import { Badge } from "@/components/ui/badge"
 import { useAppStore } from "@/store/use-app-store"
 import { computeCompatibility } from "@/lib/compatibility"
 import type { ModelCard } from "@/types/model"
-import { Search, Grid, List, Settings, Filter } from "lucide-react"
+import { Search, Grid, List, Filter, Zap, Settings, Moon, Sun } from "lucide-react"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
+import { useTheme } from "next-themes"
+import { useRouter } from "next/navigation"
 
 export default function DashboardPage() {
-  const { specs, hasEnteredSpecs, loadFromStorage, bookmarks, addBookmark, removeBookmark, filters, setFilters } = useAppStore()
+  const router = useRouter()
+  const { specs, hasEnteredSpecs, loadFromStorage, bookmarks, addBookmark, removeBookmark, filters, setFilters, openrouterApiKey } = useAppStore()
+  const { theme, setTheme } = useTheme()
   const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
@@ -23,11 +27,15 @@ export default function DashboardPage() {
     setMounted(true)
   }, [loadFromStorage])
 
-  if (!mounted) return null
+  if (!mounted) return (
+    <div className="flex items-center justify-center h-screen">
+      <div className="text-muted-foreground">Loading...</div>
+    </div>
+  )
 
   // Enrich models with compatibility
   const enrichedModels: ModelCard[] = MOCK_MODELS.map((m) => {
-    if (specs && m.estimatedSizeGB) {
+    if (specs && m.estimatedSizeGB != null) {
       const compat = computeCompatibility(m.estimatedSizeGB, m.contextLength ?? null, specs)
       return {
         ...m,
@@ -48,7 +56,6 @@ export default function DashboardPage() {
   const filtered = useMemo(() => {
     let result = enrichedModels
 
-    // Search
     if (filters.searchQuery) {
       const q = filters.searchQuery.toLowerCase()
       result = result.filter(
@@ -58,31 +65,21 @@ export default function DashboardPage() {
           m.author.toLowerCase().includes(q)
       )
     }
-
-    // Compatibility
     if (filters.compatibility.length > 0) {
       result = result.filter((m) => filters.compatibility.includes(m.compatibility))
     }
-
-    // Tasks
     if (filters.tasks.length > 0) {
       result = result.filter((m) => m.pipeline_tag && filters.tasks.includes(m.pipeline_tag))
     }
-
-    // Format
     if (filters.formats.length > 0) {
       result = result.filter((m) => m.format && filters.formats.includes(m.format))
     }
-
-    // Size range
     if (filters.sizeMinGB !== null) {
       result = result.filter((m) => (m.estimatedSizeGB ?? 0) >= filters.sizeMinGB!)
     }
     if (filters.sizeMaxGB !== null) {
       result = result.filter((m) => (m.estimatedSizeGB ?? Infinity) <= filters.sizeMaxGB!)
     }
-
-    // Param range
     if (filters.paramMinB !== null) {
       result = result.filter((m) => (m.paramCount ?? 0) >= filters.paramMinB!)
     }
@@ -90,7 +87,6 @@ export default function DashboardPage() {
       result = result.filter((m) => (m.paramCount ?? Infinity) <= filters.paramMaxB!)
     }
 
-    // Sort
     result = [...result].sort((a, b) => {
       const dir = filters.sortDir === "asc" ? 1 : -1
       switch (filters.sortBy) {
@@ -114,62 +110,72 @@ export default function DashboardPage() {
 
   const totalCount = MOCK_MODELS.length
   const filteredCount = filtered.length
-
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid")
 
   return (
-    <div className="flex h-screen overflow-hidden">
+    <div className="flex h-screen overflow-hidden bg-background">
       {/* Desktop Sidebar */}
-      <div className="hidden lg:block w-72 flex-shrink-0 border-r bg-muted/20 p-4">
-        <FilterSidebar />
-      </div>
+      <aside className="hidden xl:block w-72 flex-shrink-0 border-r bg-muted/30 overflow-y-auto">
+        <div className="p-4">
+          <FilterSidebar />
+        </div>
+      </aside>
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Top Bar */}
-        <div className="border-b p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <header className="border-b bg-card/50 backdrop-blur-sm px-4 py-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3 flex-1">
-            {/* Mobile filter - hidden on desktop */}
-            <div className="lg:hidden">
-              <Sheet>
-                <SheetTrigger>
-                  <Button variant="outline" size="sm" className="gap-2">
-                    <Filter className="w-4 h-4" />
-                    Filters
-                  </Button>
-                </SheetTrigger>
-                <SheetContent side="left" className="w-80 p-0">
-                  <div className="p-4">
-                    <FilterSidebar />
-                  </div>
-                </SheetContent>
-              </Sheet>
+            {/* Logo */}
+            <div
+              className="flex items-center gap-2 cursor-pointer shrink-0"
+              onClick={() => router.push("/")}
+            >
+              <div className="w-7 h-7 rounded-lg bg-primary flex items-center justify-center">
+                <Zap className="w-3.5 h-3.5 text-primary-foreground" />
+              </div>
+              <span className="font-bold text-sm hidden sm:inline">ModelDB</span>
             </div>
 
+            {/* Mobile filter */}
+            <Sheet>
+              <SheetTrigger>
+                <Button variant="outline" size="sm" className="xl:hidden gap-1.5 shrink-0">
+                  <Filter className="w-3.5 h-3.5" />
+                  Filters
+                </Button>
+              </SheetTrigger>
+              <SheetContent side="left" className="w-80 p-0">
+                <div className="p-4">
+                  <FilterSidebar />
+                </div>
+              </SheetContent>
+            </Sheet>
+
             {/* Search */}
-            <div className="relative flex-1 max-w-md">
+            <div className="relative flex-1 max-w-sm">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
-                placeholder="Search models..."
+                placeholder="Search models, authors..."
                 value={filters.searchQuery}
                 onChange={(e) => setFilters({ searchQuery: e.target.value })}
-                className="pl-9"
+                className="pl-9 h-9 text-sm bg-muted/50"
               />
             </div>
           </div>
 
           <div className="flex items-center gap-2">
-            <Badge variant="secondary" className="text-xs">
-              {filteredCount} / {totalCount} models
+            <Badge variant="secondary" className="text-xs shrink-0">
+              {filteredCount} / {totalCount}
             </Badge>
 
             {/* Sort */}
             <Select value={filters.sortBy} onValueChange={(v) => setFilters({ sortBy: v as typeof filters.sortBy })}>
-              <SelectTrigger className="w-36 h-8 text-xs">
-                <SelectValue placeholder="Sort by" />
+              <SelectTrigger className="w-32 h-8 text-xs shrink-0">
+                <SelectValue placeholder="Sort" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="score">Compatibility</SelectItem>
+                <SelectItem value="score">Score</SelectItem>
                 <SelectItem value="downloads">Downloads</SelectItem>
                 <SelectItem value="trending">Trending</SelectItem>
                 <SelectItem value="updated">Updated</SelectItem>
@@ -178,81 +184,72 @@ export default function DashboardPage() {
             </Select>
 
             {/* View toggle */}
+            <div className="flex border rounded-md overflow-hidden">
+              <Button
+                variant={viewMode === "grid" ? "default" : "ghost"}
+                size="sm"
+                className="h-8 w-8 p-0 rounded-none"
+                onClick={() => setViewMode("grid")}
+              >
+                <Grid className="w-3.5 h-3.5" />
+              </Button>
+              <Button
+                variant={viewMode === "list" ? "default" : "ghost"}
+                size="sm"
+                className="h-8 w-8 p-0 rounded-none"
+                onClick={() => setViewMode("list")}
+              >
+                <List className="w-3.5 h-3.5" />
+              </Button>
+            </div>
+
+            {/* Theme toggle */}
             <Button
               variant="ghost"
               size="sm"
               className="h-8 w-8 p-0"
-              onClick={() => setViewMode(viewMode === "grid" ? "list" : "grid")}
+              onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
             >
-              {viewMode === "grid" ? <List className="w-4 h-4" /> : <Grid className="w-4 h-4" />}
+              {theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
             </Button>
           </div>
-        </div>
+        </header>
 
-        {/* Active Filters */}
-        {(filters.compatibility.length > 0 ||
-          filters.tasks.length > 0 ||
-          filters.formats.length > 0 ||
-          filters.searchQuery) && (
-          <div className="px-4 py-2 border-b flex flex-wrap gap-2">
+        {/* Active Filters Strip */}
+        {(filters.compatibility.length > 0 || filters.tasks.length > 0 || filters.searchQuery) && (
+          <div className="px-4 py-2 border-b flex flex-wrap gap-2 items-center bg-muted/20">
+            <span className="text-xs text-muted-foreground mr-1">Active:</span>
             {filters.searchQuery && (
               <Badge variant="secondary" className="text-xs gap-1">
-                Search: "{filters.searchQuery}"
-                <button
-                  className="ml-1 hover:text-foreground"
-                  onClick={() => setFilters({ searchQuery: "" })}
-                >
-                  ×
-                </button>
+                &quot;{filters.searchQuery}&quot;
+                <button className="ml-0.5 hover:text-foreground" onClick={() => setFilters({ searchQuery: "" })}>x</button>
               </Badge>
             )}
             {filters.compatibility.map((c) => (
               <Badge key={c} variant="secondary" className="text-xs gap-1">
                 {c}
-                <button
-                  className="ml-1 hover:text-foreground"
-                  onClick={() => setFilters({ compatibility: filters.compatibility.filter((x) => x !== c) })}
-                >
-                  ×
-                </button>
+                <button className="ml-0.5 hover:text-foreground" onClick={() => setFilters({ compatibility: filters.compatibility.filter((x) => x !== c) })}>x</button>
               </Badge>
             ))}
             {filters.tasks.map((t) => (
               <Badge key={t} variant="secondary" className="text-xs gap-1">
                 {t}
-                <button
-                  className="ml-1 hover:text-foreground"
-                  onClick={() => setFilters({ tasks: filters.tasks.filter((x) => x !== t) })}
-                >
-                  ×
-                </button>
+                <button className="ml-0.5 hover:text-foreground" onClick={() => setFilters({ tasks: filters.tasks.filter((x) => x !== t) })}>x</button>
               </Badge>
             ))}
+            <Button variant="ghost" size="sm" className="h-5 text-xs px-2" onClick={() => setFilters({ compatibility: [], tasks: [], searchQuery: "", formats: [] })}>
+              Clear all
+            </Button>
           </div>
         )}
 
         {/* Model Grid */}
-        <div className="flex-1 overflow-y-auto p-4">
+        <main className="flex-1 overflow-y-auto p-4 lg:p-6">
           {filtered.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full text-center">
+            <div className="flex flex-col items-center justify-center h-full text-center space-y-4">
+              <Filter className="w-12 h-12 text-muted-foreground/40" />
               <p className="text-lg font-medium text-muted-foreground">No models match your filters</p>
-              <Button
-                variant="outline"
-                className="mt-4"
-                onClick={() =>
-                  setFilters({
-                    compatibility: [],
-                    tasks: [],
-                    formats: [],
-                    licenses: [],
-                    sizeMinGB: null,
-                    sizeMaxGB: null,
-                    paramMinB: null,
-                    paramMaxB: null,
-                    searchQuery: "",
-                  })
-                }
-              >
+              <Button variant="outline" onClick={() => setFilters({ compatibility: [], tasks: [], formats: [], licenses: [], sizeMinGB: null, sizeMaxGB: null, paramMinB: null, paramMaxB: null, searchQuery: "" })}>
                 Clear all filters
               </Button>
             </div>
@@ -260,8 +257,8 @@ export default function DashboardPage() {
             <div
               className={
                 viewMode === "grid"
-                  ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"
-                  : "flex flex-col gap-3 max-w-3xl"
+                  ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-4"
+                  : "flex flex-col gap-3 max-w-4xl mx-auto"
               }
             >
               {filtered.map((model) => (
@@ -280,7 +277,7 @@ export default function DashboardPage() {
               ))}
             </div>
           )}
-        </div>
+        </main>
       </div>
     </div>
   )
