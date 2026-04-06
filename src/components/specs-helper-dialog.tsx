@@ -234,3 +234,79 @@ export function SpecsHelperDialog() {
     </Dialog>
   )
 }
+
+export function SpecsHelperDialogInline() {
+  const [defaultOS, setDefaultOS] = useState<"windows" | "macos" | "linux">("windows")
+
+  useEffect(() => {
+    setDefaultOS(detectOS())
+  }, [])
+
+  return (
+    <Dialog>
+      <DialogTrigger>
+        <button className="inline text-primary underline underline-offset-2 hover:text-primary/80 transition-colors font-medium">
+          check this guide
+        </button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Monitor className="w-4 h-4" />
+            Finding your hardware specs
+          </DialogTitle>
+          <DialogDescription>
+            Quick ways to find the 4 values you need. Click any command to copy it.
+          </DialogDescription>
+        </DialogHeader>
+
+        <Tabs defaultValue={defaultOS} key={defaultOS}>
+          <TabsList className="w-full">
+            <TabsTrigger value="windows" className="flex-1 text-xs">Windows</TabsTrigger>
+            <TabsTrigger value="macos" className="flex-1 text-xs">macOS</TabsTrigger>
+            <TabsTrigger value="linux" className="flex-1 text-xs">Linux</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="windows" className="space-y-4 pt-3">
+            <p className="text-[11px] text-muted-foreground">
+              <span className="font-semibold text-foreground">Quickest way:</span>{" "}
+              Open <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-mono">Task Manager</Badge> (Ctrl+Shift+Esc) &gt; Performance tab.
+            </p>
+            <SpecBlock icon={<Database className={ICON_CLASS} />} label="RAM" guiPath="Settings > System > About > Installed RAM" command={`systeminfo | findstr "Total Physical Memory"`} />
+            <SpecBlock icon={<Monitor className={ICON_CLASS} />} label="VRAM" guiPath="Task Manager > Performance > GPU > Dedicated GPU Memory" command="nvidia-smi --query-gpu=memory.total --format=csv,noheader" />
+            <SpecBlock icon={<Cpu className={ICON_CLASS} />} label="CPU cores" guiPath="Task Manager > Performance > CPU > Cores" command="echo %NUMBER_OF_PROCESSORS%" />
+            <SpecBlock icon={<HardDrive className={ICON_CLASS} />} label="Disk" guiPath="File Explorer > This PC > drive bar" command={`wmic logicaldisk get freespace,caption`} />
+          </TabsContent>
+
+          <TabsContent value="macos" className="space-y-4 pt-3">
+            <p className="text-[11px] text-muted-foreground">
+              <span className="font-semibold text-foreground">Quickest way:</span>{" "}
+              Apple menu &gt; About This Mac. Apple Silicon VRAM = same as RAM.
+            </p>
+            <SpecBlock icon={<Database className={ICON_CLASS} />} label="RAM" guiPath="Apple menu > About This Mac > Memory" command={`sysctl -n hw.memsize | awk '{print $0/1073741824" GB"}'`} />
+            <SpecBlock icon={<Monitor className={ICON_CLASS} />} label="VRAM" guiPath="Apple Silicon: same as RAM" command={`system_profiler SPDisplaysDataType | grep "VRAM\\|Chipset Model"`} />
+            <SpecBlock icon={<Cpu className={ICON_CLASS} />} label="CPU cores" guiPath="Apple menu > About This Mac > chip" command="sysctl -n hw.ncpu" />
+            <SpecBlock icon={<HardDrive className={ICON_CLASS} />} label="Disk" guiPath="Apple menu > About This Mac > Storage" command={`df -h / | awk 'NR==2{print $4" free"}'`} />
+          </TabsContent>
+
+          <TabsContent value="linux" className="space-y-4 pt-3">
+            <p className="text-[11px] text-muted-foreground">
+              <span className="font-semibold text-foreground">Quickest way:</span>{" "}
+              Run <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-mono">neofetch</Badge> or <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-mono">fastfetch</Badge>.
+            </p>
+            <SpecBlock icon={<Database className={ICON_CLASS} />} label="RAM" guiPath="System Settings > About" command={`free -h | awk '/Mem:/{print $2}'`} />
+            <SpecBlock icon={<Monitor className={ICON_CLASS} />} label="VRAM" guiPath="nvidia-settings > GPU Information" command="nvidia-smi --query-gpu=memory.total --format=csv,noheader" />
+            <SpecBlock icon={<Cpu className={ICON_CLASS} />} label="CPU cores" guiPath="/proc/cpuinfo or System Monitor" command="nproc" />
+            <SpecBlock icon={<HardDrive className={ICON_CLASS} />} label="Disk" guiPath="Files > Properties on drive" command={`df -h / | awk 'NR==2{print $4" free"}'`} />
+          </TabsContent>
+        </Tabs>
+
+        <div className="mt-2 space-y-2 border-t pt-3">
+          <p className="text-[11px] text-muted-foreground leading-relaxed">
+            <span className="font-medium text-foreground">Rough estimates are fine</span> — rounding to the nearest 4 GB is close enough.
+          </p>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}

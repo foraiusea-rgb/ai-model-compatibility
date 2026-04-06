@@ -13,7 +13,7 @@ import { useAppStore } from "@/store/use-app-store"
 import { useRouter } from "next/navigation"
 import { useTheme } from "next-themes"
 import type { HardwareSpecs } from "@/types/model"
-import { SpecsHelperDialog } from "@/components/specs-helper-dialog"
+import { SpecsHelperDialog, SpecsHelperDialogInline } from "@/components/specs-helper-dialog"
 
 const INFERENCE_ENGINES = [
   { value: "ollama", label: "Ollama", emoji: "🦙", desc: "Easiest setup, works everywhere" },
@@ -148,10 +148,20 @@ export function HeroSpecInput() {
           {/* Spec Input Card */}
           <Card className="border shadow-2xl shadow-black/20 bg-card/80 backdrop-blur-sm">
             <CardContent className="p-4 sm:p-6 space-y-5">
-              {/* Specs helper — inside card, top */}
+              {/* Header with specs helper — prominent */}
               <div className="flex items-center justify-between">
                 <span className="text-sm font-semibold text-foreground">Your hardware</span>
                 <SpecsHelperDialog />
+              </div>
+
+              {/* Not sure banner — visible callout above sliders */}
+              <div className="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-primary/5 border border-primary/15">
+                <Info className="w-4 h-4 text-primary shrink-0" />
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  Not sure what to enter? Rough estimates work fine — or{" "}
+                  <SpecsHelperDialogInline />
+                  {" "}to find exact values.
+                </p>
               </div>
 
               {/* Row 1: RAM + GPU */}
