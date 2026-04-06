@@ -11,7 +11,6 @@ import { Input } from "@/components/ui/input"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { useAppStore } from "@/store/use-app-store"
 import { computeCompatibility } from "@/lib/compatibility"
-import { useTheme } from "next-themes"
 import type { ModelCard } from "@/types/model"
 import { useRouter } from "next/navigation"
 import { ModelGridItem } from "@/components/model/model-grid-item"
@@ -21,7 +20,7 @@ import { MOCK_MODELS } from "@/lib/mock-data"
 export default function DashboardPage() {
   const router = useRouter()
   const { specs, loadFromStorage, bookmarks, addBookmark, removeBookmark, filters, setFilters } = useAppStore()
-  const { theme, setTheme } = useTheme()
+  const [theme, setThemeState] = useState<"dark" | "light">("dark")
   const [mounted, setMounted] = useState(false)
   const [searchInput, setSearchInput] = useState("")
   const [sort, setSort] = useState("downloads")
@@ -141,7 +140,11 @@ export default function DashboardPage() {
             </div>
 
             {/* Theme toggle */}
-            <Button variant="ghost" size="sm" className="h-7 w-7 p-0 shrink-0" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
+            <Button variant="ghost" size="sm" className="h-7 w-7 p-0 shrink-0" onClick={() => {
+              const next = theme === "dark" ? "light" : "dark"
+              setThemeState(next)
+              document.documentElement.classList.toggle("dark", next === "dark")
+            }}>
               {theme === "dark" ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
             </Button>
           </div>
