@@ -36,10 +36,9 @@ const validSorts = ["downloads", "likes", "lastModified", "createdAt"];
   const result = await searchHFModels({
     limit,
     offset,
-    search: q,
+    search: q || "model",
     sort: hfSort as any,
     direction,
-    filter: ["pipeline_tag:text-generation", "pipeline_tag:text-to-image", "pipeline_tag:text-to-speech"],
   });
 
     // Convert HF responses to our internal format
