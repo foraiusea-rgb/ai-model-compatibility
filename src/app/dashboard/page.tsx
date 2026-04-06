@@ -16,6 +16,7 @@ import type { ModelCard } from "@/types/model"
 import { useRouter } from "next/navigation"
 import { ModelGridItem } from "@/components/model/model-grid-item"
 import { FilterSidebar } from "@/components/filters/filter-sidebar"
+import { MOCK_MODELS } from "@/lib/mock-data"
 
 export default function DashboardPage() {
   const router = useRouter()
@@ -43,7 +44,6 @@ export default function DashboardPage() {
   const modelCount = 10
   const modelCards: ModelCard[] = useMemo(() => {
     // Use mock for now (real API is in production)
-    const { MOCK_MODELS } = require("@/lib/mock-data")
     return MOCK_MODELS.map((m: any) => {
       if (specs && m.estimatedSizeGB != null) {
         const compat = computeCompatibility(m.estimatedSizeGB, m.contextLength ?? null, specs)
