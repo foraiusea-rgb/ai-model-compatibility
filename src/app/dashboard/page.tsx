@@ -8,7 +8,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { useAppStore } from "@/store/use-app-store"
 import { computeCompatibility } from "@/lib/compatibility"
 import type { ModelCard } from "@/types/model"
@@ -86,19 +85,12 @@ export default function DashboardPage() {
             </div>
 
             {/* Mobile filter */}
-            <Sheet>
-              <SheetTrigger>
-                <Button variant="outline" size="sm" className="xl:hidden gap-1.5 shrink-0 h-8">
-                  <Filter className="w-3.5 h-3.5" />
-                  Filters
-                </Button>
-              </SheetTrigger>
-              <SheetContent side="left" className="w-72 p-0">
-                <div className="p-3">
-                  <FilterSidebar />
-                </div>
-              </SheetContent>
-            </Sheet>
+            <div className="xl:hidden">
+              <Button variant="outline" size="sm" className="gap-1.5 shrink-0 h-8">
+                <Filter className="w-3.5 h-3.5" />
+                Filters
+              </Button>
+            </div>
 
             {/* Search */}
             <div className="relative flex-1 max-w-sm">
