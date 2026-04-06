@@ -7,7 +7,7 @@ import { Star, Download, Clock, Cpu, HardDrive, ChevronRight } from "lucide-reac
 import { useRouter } from "next/navigation"
 import type { ModelCard } from "@/types/model"
 import { getCompatibilityColor, getCompatibilityLabel, getCompatibilityIcon } from "@/lib/compatibility"
-import { formatDistanceToNow } from "date-fns"
+import { formatDistanceToNowStrict, isValid } from "date-fns"
 
 interface ModelGridItemProps {
   model: ModelCard
@@ -90,7 +90,7 @@ export function ModelGridItem({ model, isBookmarked, onToggleBookmark }: ModelGr
           </div>
           <div className="flex items-center gap-1.5">
             <Clock className="w-3.5 h-3.5" />
-            <span>{formatDistanceToNow(new Date(model.updatedAt), { addSuffix: true })}</span>
+            <span>{formatDistanceToNowStrict(new Date(model.updatedAt), { addSuffix: true })}</span>
           </div>
         </div>
 
