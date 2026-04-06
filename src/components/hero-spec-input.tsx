@@ -2,22 +2,29 @@
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
-import { Switch } from "@/components/ui/switch"
 import { Separator } from "@/components/ui/separator"
+import { Switch } from "@/components/ui/switch"
 import { Cpu, Monitor, Database, HardDrive, ArrowRight, Sparkles, Zap, ShieldCheck, BarChart3 } from "lucide-react"
 import { useState } from "react"
 import { useAppStore } from "@/store/use-app-store"
 import { useRouter } from "next/navigation"
 import type { HardwareSpecs } from "@/types/model"
 
+const INFERENCE_ENGINES = [
+  { value: "ollama", label: "Ollama", emoji: "🦙" },
+  { value: "llama-cpp", label: "llama.cpp", emoji: "💻" },
+  { value: "vllm", label: "vLLM", emoji: "⚡" },
+  { value: "transformers", label: "Transformers", emoji: "🤗" },
+] as const
+
 export function HeroSpecInput() {
   const router = useRouter()
   const { setSpecs, specs, setHasEnteredSpecs } = useAppStore()
   const [ramGB, setRamGB] = useState(specs?.ramGB || 16)
-  const [vramGB, setVramGB] = useState<number>(specs?.vramGB ?? 8)
+  const [vramGB, setVramGB] = useState<number>(specs?.vramGB ?? 12)
   const [hasGPU, setHasGPU] = useState(specs?.vramGB !== null)
   const [cpuCores, setCpuCores] = useState(specs?.cpuCores || 8)
   const [diskFreeGB, setDiskFreeGB] = useState(specs?.diskFreeGB || 100)
@@ -26,150 +33,150 @@ export function HeroSpecInput() {
   )
 
   const handleSubmit = () => {
-    const hardwareSpecs: HardwareSpecs = {
+    setSpecs({
       ramGB,
       vramGB: hasGPU ? vramGB : null,
       cpuCores,
       diskFreeGB,
       inference,
-    }
-    setSpecs(hardwareSpecs)
+    })
     setHasEnteredSpecs(true)
     router.push("/dashboard")
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-background">
+    <div className="min-h-screen flex flex-col bg-background relative overflow-hidden">
+      {/* Animated Background */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-[-40%] left-[-10%] w-[80%] h-[80%] rounded-full bg-primary/[0.03] blur-3xl animate-mesh" />
+        <div className="absolute bottom-[-40%] right-[-10%] w-[70%] h-[70%] rounded-full bg-emerald-500/[0.03] blur-3xl animate-mesh-slow" />
+        <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:64px_64px]" />
+      </div>
+
       {/* Nav */}
-      <nav className="border-b px-6 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
+      <nav className="border-b px-6 py-3 flex items-center justify-between relative z-10 bg-background/80 backdrop-blur-md">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center shadow-lg shadow-primary/20">
             <Zap className="w-4 h-4 text-primary-foreground" />
           </div>
-          <span className="font-bold text-base tracking-tight">ModelDB</span>
+          <div>
+            <span className="font-bold text-base tracking-tight">ModelDB</span>
+            <span className="ml-2 text-xs text-muted-foreground font-normal">beta</span>
+          </div>
         </div>
         <div className="flex items-center gap-3">
-          <Badge variant="secondary" className="font-mono text-xs">v0.1.0</Badge>
+          <Badge variant="secondary" className="font-mono text-[10px] px-2 py-0.5 opacity-70">v0.1.0</Badge>
         </div>
       </nav>
 
       {/* Hero */}
-      <div className="flex-1 flex flex-col items-center justify-center px-4 py-12 lg:py-16">
-        <div className="max-w-2xl w-full space-y-8">
-          {/* Hero Text */}
-          <div className="text-center space-y-4">
-            <Badge variant="secondary" className="mb-2 px-3 py-1 text-xs font-medium gap-1.5">
-              <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+      <div className="flex-1 flex flex-col items-center justify-center px-4 py-12 lg:py-16 relative z-10">
+        <div className="max-w-xl w-full space-y-10">
+          {/* Hero Text - Bigger, tighter, better gradient */}
+          <div className="text-center space-y-5">
+            <Badge variant="secondary" className="mb-2 px-3 py-1 text-xs font-medium gap-1.5 border border-primary/20 bg-primary/5 text-primary">
+              <Sparkles className="w-3.5 h-3.5" />
               2.76M+ Models Indexed & Searched
             </Badge>
-            <h1 className="text-4xl md:text-5xl lg:text-6xl font-extrabold tracking-tight leading-[1.1]">
+            <h1 className="text-5xl md:text-6xl font-extrabold tracking-tight leading-[1.05]">
               Find the right AI model
               <br />
-              <span className="bg-gradient-to-r from-primary to-emerald-500 bg-clip-text text-transparent">
+              <span className="bg-gradient-to-r from-emerald-400 via-cyan-400 to-blue-400 bg-clip-text text-transparent">
                 for your hardware
               </span>
             </h1>
-            <p className="text-lg text-muted-foreground max-w-lg mx-auto leading-relaxed">
-              Enter your specs. Get instant compatibility scores. No signup, no tracking. Your data stays in your browser.
+            <p className="text-base text-muted-foreground max-w-md mx-auto leading-relaxed">
+              Enter your specs. Get instant compatibility scores.
+              Your data stays in your browser.
             </p>
           </div>
 
-          {/* Feature Pills */}
-          <div className="flex flex-wrap items-center justify-center gap-3">
+          {/* Feature Pills - Tighter, more compact */}
+          <div className="flex items-center justify-center gap-6">
             {[
-              { icon: Zap, label: "Instant Scoring", desc: "10ms response" },
+              { icon: Zap, label: "Instant Scoring", desc: "10ms" },
               { icon: ShieldCheck, label: "Zero Tracking", desc: "100% local" },
-              { icon: BarChart3, label: "2.76M+ Models", desc: "All of HuggingFace" },
+              { icon: BarChart3, label: "2.76M+ Models", desc: "All of HF" },
             ].map(({ icon: Icon, label, desc }) => (
-              <div key={label} className="flex items-center gap-2 px-3 py-1.5 rounded-full border bg-card/50">
-                <Icon className="w-3.5 h-3.5 text-muted-foreground" />
-                <div className="text-left">
-                  <p className="text-xs font-medium leading-none">{label}</p>
-                  <p className="text-[10px] text-muted-foreground mt-0.5">{desc}</p>
+              <div key={label} className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-full bg-muted/60 flex items-center justify-center">
+                  <Icon className="w-3.5 h-3.5 text-muted-foreground" />
+                </div>
+                <div className="text-left leading-tight">
+                  <p className="text-xs font-semibold">{label}</p>
+                  <p className="text-[10px] text-muted-foreground">{desc}</p>
                 </div>
               </div>
             ))}
           </div>
 
-          {/* Spec Input Card */}
-          <Card className="border-2 shadow-xl shadow-primary/5">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Monitor className="w-5 h-5 text-primary" />
-                Your Hardware
-              </CardTitle>
-              <CardDescription>
-                Tell us what you&apos;re running on and we&apos;ll match you with compatible models.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {/* RAM */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <label className="flex items-center gap-2 text-sm font-medium">
-                    <Database className="w-4 h-4 text-muted-foreground" />
-                    System RAM
-                  </label>
-                  <span className="text-sm font-mono bg-muted px-2 py-0.5 rounded text-foreground font-semibold">{ramGB} GB</span>
-                </div>
-                <input
-                  type="range"
-                  min={4}
-                  max={256}
-                  step={4}
-                  value={ramGB}
-                  onChange={(e) => setRamGB(e.target.valueAsNumber)}
-                  className="w-full h-2 rounded-full appearance-none cursor-pointer accent-primary bg-muted"
-                />
-                <div className="flex justify-between text-xs text-muted-foreground">
-                  <span>4 GB</span>
-                  <span>256 GB</span>
-                </div>
-              </div>
-
-              <Separator />
-
-              {/* GPU Toggle & VRAM */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <label className="flex items-center gap-2 text-sm font-medium">
-                    <Monitor className="w-4 h-4 text-muted-foreground" />
-                    GPU / VRAM
-                  </label>
-                  <div className="flex items-center gap-3">
-                    <span className="text-sm font-mono bg-muted px-2 py-0.5 rounded text-foreground font-semibold">
-                      {hasGPU ? `${vramGB} GB` : "CPU Only"}
-                    </span>
-                    <Switch checked={hasGPU} onCheckedChange={setHasGPU} />
+          {/* Spec Input Card - Cleaned up */}
+          <Card className="border shadow-2xl shadow-black/20 bg-card/80 backdrop-blur-sm">
+            <CardContent className="p-6 space-y-5">
+              {/* Row 1: RAM + GPU */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                {/* RAM */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="flex items-center gap-2 text-sm font-medium">
+                      <Database className="w-4 h-4 text-muted-foreground" />
+                      RAM
+                    </label>
+                    <span className="text-sm font-mono text-primary font-semibold">{ramGB} GB</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={4}
+                    max={256}
+                    step={4}
+                    value={ramGB}
+                    onChange={(e) => setRamGB(e.target.valueAsNumber)}
+                  />
+                  <div className="flex justify-between text-[10px] text-muted-foreground/60 font-mono">
+                    <span>4 GB</span>
+                    <span>256 GB</span>
                   </div>
                 </div>
-                {hasGPU && (
-                  <>
-                    <input
-                      type="range"
-                      min={4}
-                      max={80}
-                      step={2}
-                      value={vramGB}
-                      onChange={(e) => setVramGB(e.target.valueAsNumber)}
-                      className="w-full h-2 rounded-full appearance-none cursor-pointer accent-primary bg-muted"
-                    />
-                    <div className="flex justify-between text-xs text-muted-foreground">
-                      <span>4 GB</span>
-                      <span>80 GB</span>
+
+                {/* GPU / VRAM */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="flex items-center gap-2 text-sm font-medium">
+                      <Monitor className="w-4 h-4 text-muted-foreground" />
+                      VRAM
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-mono text-primary font-semibold">
+                        {hasGPU ? `${vramGB} GB` : "CPU only"}
+                      </span>
+                      <Switch checked={hasGPU} onCheckedChange={setHasGPU} className="scale-75" />
                     </div>
-                  </>
-                )}
+                  </div>
+                  <input
+                    type="range"
+                    min={4}
+                    max={80}
+                    step={2}
+                    value={hasGPU ? vramGB : 0}
+                    onChange={(e) => setVramGB(e.target.valueAsNumber)}
+                    disabled={!hasGPU}
+                    className={hasGPU ? "" : "opacity-40"}
+                  />
+                  <div className="flex justify-between text-[10px] text-muted-foreground/60 font-mono">
+                    <span>{hasGPU ? "4 GB" : "—"}</span>
+                    <span>{hasGPU ? "80 GB" : "—"}</span>
+                  </div>
+                </div>
               </div>
 
               <Separator />
 
-              {/* CPU Cores & Disk */}
+              {/* Row 2: CPU + Disk */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <label className="flex items-center gap-2 text-sm font-medium">
                     <Cpu className="w-4 h-4 text-muted-foreground" />
-                    CPU Cores
+                    Cores
                   </label>
                   <Input
                     type="number"
@@ -177,13 +184,13 @@ export function HeroSpecInput() {
                     onChange={(e) => setCpuCores(Math.max(1, parseInt(e.target.value) || 1))}
                     min={1}
                     max={128}
-                    className="font-mono h-10"
+                    className="h-10 font-mono text-center"
                   />
                 </div>
                 <div className="space-y-2">
                   <label className="flex items-center gap-2 text-sm font-medium">
                     <HardDrive className="w-4 h-4 text-muted-foreground" />
-                    Free Disk (GB)
+                    Disk (GB)
                   </label>
                   <Input
                     type="number"
@@ -191,47 +198,54 @@ export function HeroSpecInput() {
                     onChange={(e) => setDiskFreeGB(Math.max(1, parseInt(e.target.value) || 1))}
                     min={1}
                     max={10000}
-                    className="font-mono h-10"
+                    className="h-10 font-mono text-center"
                   />
                 </div>
               </div>
 
-              <Separator />
-
-              {/* Inference Engine */}
+              {/* Inference — Chip-style selector */}
               <div className="space-y-2">
-                <label className="text-sm font-medium">Inference Engine</label>
-                <Select value={inference} onValueChange={(v) => setInference(v as HardwareSpecs["inference"])}>
-                  <SelectTrigger className="h-10">
-                    <SelectValue placeholder="Select engine" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="ollama">🦙 Ollama (recommended)</SelectItem>
-                    <SelectItem value="llama-cpp">💻 llama.cpp</SelectItem>
-                    <SelectItem value="vllm">⚡ vLLM (GPU)</SelectItem>
-                    <SelectItem value="transformers">🤗 HuggingFace Transformers</SelectItem>
-                  </SelectContent>
-                </Select>
+                <label className="text-sm font-medium">Inference</label>
+                <div className="flex gap-1.5">
+                  {INFERENCE_ENGINES.map((eng) => (
+                    <button
+                      key={eng.value}
+                      onClick={() => setInference(eng.value as any)}
+                      className={`flex-1 h-9 rounded-lg text-xs font-medium transition-all border ${
+                        inference === eng.value
+                          ? "bg-primary text-primary-foreground border-primary shadow-sm"
+                          : "bg-muted/50 text-muted-foreground border-border hover:bg-muted hover:text-foreground"
+                      }`}
+                    >
+                      {eng.emoji} {eng.label}
+                    </button>
+                  ))}
+                </div>
               </div>
 
-              <Button onClick={handleSubmit} size="lg" className="w-full gap-2 h-12 text-base font-semibold">
+              {/* CTA - Big, bold, gradient */}
+              <Button
+                onClick={handleSubmit}
+                size="lg"
+                className="w-full h-12 text-base font-bold gap-2 bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-white shadow-lg shadow-emerald-500/20 hover:shadow-emerald-500/30 transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
+              >
                 Find Compatible Models
                 <ArrowRight className="w-4 h-4" />
               </Button>
             </CardContent>
           </Card>
 
-          {/* Skip option */}
+          {/* Skip link */}
           <div className="text-center">
             <Button
               variant="ghost"
-              className="text-muted-foreground hover:text-foreground transition-colors"
+              className="text-sm text-muted-foreground/70 hover:text-foreground transition-colors"
               onClick={() => {
                 setHasEnteredSpecs(false)
                 router.push("/dashboard")
               }}
             >
-              Skip — browse all models without specs →
+              or browse all models without specs
             </Button>
           </div>
         </div>
