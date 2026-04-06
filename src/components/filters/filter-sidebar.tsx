@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -9,7 +10,6 @@ import { getCompatibilityLabel, getCompatibilityIcon } from "@/lib/compatibility
 import { useAppStore } from "@/store/use-app-store"
 import type { CompatibilityRating, Filters } from "@/types/model"
 import { ChevronDown, ChevronRight } from "lucide-react"
-import { useState } from "react"
 
 const TASKS = [
   "text-generation", "text2text-generation", "translation", "summarization",

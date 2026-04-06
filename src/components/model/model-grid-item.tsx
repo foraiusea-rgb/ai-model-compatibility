@@ -10,6 +10,7 @@ import { getCompatibilityColor, getCompatibilityLabel, getCompatibilityIcon } fr
 
 function relativeDate(dateStr: string): string {
   try {
+    if (!dateStr) return ""
     const d = new Date(dateStr)
     if (isNaN(d.getTime())) return ""
     const now = Date.now()
