@@ -3,13 +3,13 @@
 import { MOCK_MODELS } from "@/lib/mock-data"
 import { computeCompatibility, getCompatibilityColor, getCompatibilityLabel, getCompatibilityIcon } from "@/lib/compatibility"
 import { useAppStore } from "@/store/use-app-store"
-import type { ModelCard } from "@/types/model"
+import type { ModelCard, HFModel } from "@/types/model"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Star, Download, Calendar, Cpu, HardDrive, FileText, Sparkles, ArrowLeft, Copy, Check, MessageSquare, ExternalLink, Zap, Moon, Sun } from "lucide-react"
+import { Star, Download, Calendar, Cpu, HardDrive, FileText, Sparkles, ArrowLeft, Copy, Check, MessageSquare, ExternalLink, Zap, Moon, Sun, AlertTriangle } from "lucide-react"
 import { useRouter, useParams } from "next/navigation"
 import { useState, useEffect, useMemo } from "react"
 import { format, isValid } from "date-fns"
@@ -32,7 +32,31 @@ export default function ModelPage() {
   const { theme, setTheme } = useTheme()
   const [mounted, setMounted] = useState(false)
 
-  const model = useMemo(() => MOCK_MODELS.find((m) => m.modelId === modelId), [modelId])
+  // Try mock data first, then fetch from API
+  const mockModel = useMemo(() => MOCK_MODELS.find((m) => m.modelId === modelId), [modelId])
+  const [apiModel, setApiModel] = useState<HFModel | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(!mockModel)
+
+  useEffect(() => {
+    if (mockModel) return // already have it
+    setLoading(true)
+    setLoadError(null)
+    fetch(`/api/models?q=${encodeURIComponent(modelId)}&limit=5`)
+      .then((r) => r.json())
+      .then((data) => {
+        const match = data.models?.find((m: HFModel) => m.modelId === modelId)
+        if (match) {
+          setApiModel(match)
+        } else {
+          setLoadError("Model not found")
+        }
+      })
+      .catch(() => setLoadError("Failed to load model data"))
+      .finally(() => setLoading(false))
+  }, [modelId, mockModel])
+
+  const model = mockModel || apiModel
 
   const enriched: ModelCard | null = useMemo(() => {
     if (!model) return null
@@ -56,12 +80,43 @@ export default function ModelPage() {
     }
   }, [modelId, bookmarks, model])
 
-  if (!enriched) {
+  // Loading state
+  if (loading) {
     return (
-      <div className="max-w-5xl mx-auto px-4 py-8 space-y-6">
-        <Skeleton className="h-6 w-32" />
-        <Skeleton className="h-8 w-80" />
-        <Skeleton className="h-64 w-full" />
+      <div className="min-h-screen bg-background">
+        <header className="border-b px-4 lg:px-6 py-3">
+          <Button variant="ghost" onClick={() => router.back()} size="sm" className="gap-1.5">
+            <ArrowLeft className="w-4 h-4" />Back
+          </Button>
+        </header>
+        <div className="max-w-5xl mx-auto px-4 py-8 space-y-6">
+          <Skeleton className="h-6 w-32" />
+          <Skeleton className="h-8 w-80" />
+          <Skeleton className="h-64 w-full" />
+        </div>
+      </div>
+    )
+  }
+
+  // Error state
+  if (loadError || !enriched) {
+    return (
+      <div className="min-h-screen bg-background">
+        <header className="border-b px-4 lg:px-6 py-3">
+          <Button variant="ghost" onClick={() => router.back()} size="sm" className="gap-1.5">
+            <ArrowLeft className="w-4 h-4" />Back
+          </Button>
+        </header>
+        <div className="flex flex-col items-center justify-center py-24 gap-4">
+          <AlertTriangle className="w-10 h-10 text-amber-500" />
+          <p className="text-sm text-muted-foreground">{loadError || "Model not found"}</p>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={() => router.back()}>Go back</Button>
+            <Button variant="outline" size="sm" onClick={() => window.open(`https://huggingface.co/${modelId}`, "_blank")}>
+              <ExternalLink className="w-3.5 h-3.5 mr-1.5" />View on HuggingFace
+            </Button>
+          </div>
+        </div>
       </div>
     )
   }
@@ -110,7 +165,6 @@ export default function ModelPage() {
     }
   }
 
-  // Critical specs (elevated) vs secondary specs
   const criticalSpecs = [
     { label: "Parameters", value: enriched.paramCount ? `${enriched.paramCount}B` : "N/A", icon: Cpu },
     { label: "Estimated size", value: enriched.estimatedSizeGB ? `~${enriched.estimatedSizeGB.toFixed(1)} GB` : "N/A", icon: HardDrive },
@@ -124,12 +178,10 @@ export default function ModelPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Nav */}
       <header className="border-b px-4 lg:px-6 py-3 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Button variant="ghost" onClick={() => router.back()} size="sm" className="gap-1.5">
-            <ArrowLeft className="w-4 h-4" />
-            Back
+            <ArrowLeft className="w-4 h-4" />Back
           </Button>
           <Separator orientation="vertical" className="h-5" />
           <div className="flex items-center gap-2 cursor-pointer" onClick={() => router.push("/")}>
@@ -147,20 +199,11 @@ export default function ModelPage() {
       </header>
 
       <div className="max-w-6xl mx-auto px-4 lg:px-6 py-8">
-        {/* Header */}
         <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4 mb-6">
           <div>
             <div className="flex items-center gap-3 mb-2">
               <h1 className="text-2xl lg:text-3xl font-bold font-mono">{enriched.name || enriched.modelId.split("/").pop()}</h1>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  if (isBookmarked) removeBookmark(modelId)
-                  else addBookmark(modelId)
-                  setIsBookmarked(!isBookmarked)
-                }}
-              >
+              <Button variant="ghost" size="sm" onClick={() => { if (isBookmarked) removeBookmark(modelId); else addBookmark(modelId); setIsBookmarked(!isBookmarked) }}>
                 <Star className={`w-5 h-5 ${isBookmarked ? "fill-amber-400 text-amber-400" : "text-muted-foreground hover:text-amber-400"}`} />
               </Button>
             </div>
@@ -170,7 +213,6 @@ export default function ModelPage() {
               <span className="font-mono text-xs">{enriched.modelId}</span>
             </p>
           </div>
-
           {enriched.compatibility !== "unknown" && (
             <Badge variant="outline" className={`text-sm font-semibold self-start px-3 py-1 ${getCompatibilityColor(enriched.compatibility)}`}>
               <span className="mr-1">{getCompatibilityIcon(enriched.compatibility)}</span>
@@ -179,7 +221,6 @@ export default function ModelPage() {
           )}
         </div>
 
-        {/* Match Reason — colored by compatibility */}
         {enriched.matchReason && enriched.compatibility !== "unknown" && (
           <div className={`mb-6 p-4 rounded-xl border text-sm ${getMatchReasonStyle(enriched.compatibility)}`}>
             <p>{enriched.matchReason}</p>
@@ -187,27 +228,20 @@ export default function ModelPage() {
         )}
 
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-          {/* LEFT: Model Specs (3 cols) */}
           <div className="lg:col-span-3 space-y-6">
             <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Specifications</CardTitle>
-              </CardHeader>
+              <CardHeader><CardTitle className="text-base">Specifications</CardTitle></CardHeader>
               <CardContent className="space-y-5">
-                {/* Critical specs — elevated with background */}
                 <div className="grid grid-cols-3 gap-3">
                   {criticalSpecs.map(({ label, value, icon: Icon }) => (
                     <div key={label} className="p-3 rounded-lg bg-muted/40 border border-border/50 text-center">
                       <div className="flex items-center justify-center gap-1.5 text-[10px] text-muted-foreground mb-1">
-                        <Icon className="w-3 h-3" />
-                        {label}
+                        <Icon className="w-3 h-3" />{label}
                       </div>
                       <p className="text-base font-semibold font-mono">{value}</p>
                     </div>
                   ))}
                 </div>
-
-                {/* Secondary specs — simpler row */}
                 <div className="grid grid-cols-3 gap-x-6 gap-y-3">
                   {secondarySpecs.map(({ label, value }) => (
                     <div key={label}>
@@ -216,19 +250,13 @@ export default function ModelPage() {
                     </div>
                   ))}
                 </div>
-
                 <Separator />
-
-                {/* Tags */}
                 <div className="flex flex-wrap gap-2">
-                  {enriched.pipeline_tag && (
-                    <Badge variant="default">{enriched.pipeline_tag}</Badge>
-                  )}
+                  {enriched.pipeline_tag && <Badge variant="default">{enriched.pipeline_tag}</Badge>}
                   {enriched.tags.filter(t => !t.startsWith("license:") && !t.startsWith("region:")).map((tag) => (
                     <Badge key={tag} variant="secondary">{tag}</Badge>
                   ))}
                 </div>
-
                 <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                   <Calendar className="w-3.5 h-3.5" />
                   Updated {enriched.updatedAt && isValid(new Date(enriched.updatedAt))
@@ -237,32 +265,20 @@ export default function ModelPage() {
                 </div>
               </CardContent>
             </Card>
-
-            {/* HuggingFace link — fixed: no nested button/a */}
-            <a
-              href={`https://huggingface.co/${enriched.modelId}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg border border-border bg-background hover:bg-muted transition-colors"
-            >
-              <ExternalLink className="w-3.5 h-3.5" />
-              View on HuggingFace
+            <a href={`https://huggingface.co/${enriched.modelId}`} target="_blank" rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg border border-border bg-background hover:bg-muted transition-colors">
+              <ExternalLink className="w-3.5 h-3.5" />View on HuggingFace
             </a>
           </div>
 
-          {/* RIGHT: Actions (2 cols) */}
           <div className="lg:col-span-2 space-y-6">
-            {/* Download Commands */}
             <Card>
               <CardHeader>
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Download className="w-4 h-4" />
-                  Quick download
-                </CardTitle>
+                <CardTitle className="text-base flex items-center gap-2"><Download className="w-4 h-4" />Quick download</CardTitle>
                 <CardDescription>Run these commands in your terminal</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
-                <div className="flex items-center gap-2 p-3 bg-muted/50 rounded-lg group">
+                <div className="flex items-center gap-2 p-3 bg-muted/50 rounded-lg">
                   <code className="flex-1 text-xs font-mono break-all">{downloadCmdOllama}</code>
                   <Button variant="ghost" size="sm" className="h-7 w-7 p-0 shrink-0" onClick={() => handleCopy(downloadCmdOllama, "ollama")}>
                     {copiedOllama ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5 text-muted-foreground" />}
@@ -277,38 +293,28 @@ export default function ModelPage() {
               </CardContent>
             </Card>
 
-            {/* AI Recommendation */}
             <Card>
               <CardHeader>
-                <CardTitle className="text-base flex items-center gap-2">
-                  <MessageSquare className="w-4 h-4" />
-                  AI recommendation
-                </CardTitle>
+                <CardTitle className="text-base flex items-center gap-2"><MessageSquare className="w-4 h-4" />AI recommendation</CardTitle>
                 <CardDescription>Get personalized advice based on your hardware</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 {!openrouterApiKey ? (
                   <div className="space-y-3">
                     <p className="text-sm text-muted-foreground">
-                      This uses <a href="https://openrouter.ai" target="_blank" rel="noopener noreferrer" className="text-primary underline underline-offset-2">OpenRouter</a> to generate recommendations. Free tier models are available. Your key stays in your browser and is never sent to our servers.
+                      This uses <a href="https://openrouter.ai" target="_blank" rel="noopener noreferrer" className="text-primary underline underline-offset-2">OpenRouter</a> to generate recommendations. Free tier models are available. Your key stays in your browser.
                     </p>
-                    <input
-                      type="password"
-                      placeholder="sk-or-v1-..."
+                    <input type="password" placeholder="sk-or-v1-..."
                       className="flex-1 w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary/50"
-                      onChange={(e) => setApiKey(e.target.value)}
-                    />
+                      onChange={(e) => setApiKey(e.target.value)} />
                   </div>
                 ) : (
                   <div className="space-y-3">
                     <Button onClick={handleAISummary} disabled={aiLoading} className="gap-2 w-full">
-                      <Sparkles className="w-4 h-4" />
-                      {aiLoading ? "Analyzing..." : "Generate recommendation"}
+                      <Sparkles className="w-4 h-4" />{aiLoading ? "Analyzing..." : "Generate recommendation"}
                     </Button>
                     {aiSummary && (
-                      <div className="p-4 bg-muted/50 rounded-lg text-sm leading-relaxed whitespace-pre-wrap border">
-                        {aiSummary}
-                      </div>
+                      <div className="p-4 bg-muted/50 rounded-lg text-sm leading-relaxed whitespace-pre-wrap border">{aiSummary}</div>
                     )}
                   </div>
                 )}

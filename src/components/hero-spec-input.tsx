@@ -260,7 +260,7 @@ export function HeroSpecInput() {
                 </div>
               </div>
 
-              {/* Inference — with tooltips */}
+              {/* Inference — with title hints */}
               <div className="space-y-2">
                 <label className="flex items-center gap-2 text-sm font-medium">
                   Inference engine
@@ -271,25 +271,25 @@ export function HeroSpecInput() {
                     <TooltipContent>How the model runs on your machine. Pick Ollama if unsure.</TooltipContent>
                   </Tooltip>
                 </label>
-                <div className="grid grid-cols-2 sm:flex gap-1.5">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
                   {INFERENCE_ENGINES.map((eng) => (
-                    <Tooltip key={eng.value}>
-                      <TooltipTrigger>
-                        <button
-                          onClick={() => setInference(eng.value as any)}
-                          className={`w-full sm:flex-1 h-9 rounded-lg text-xs font-medium transition-all border ${
-                            inference === eng.value
-                              ? "bg-primary text-primary-foreground border-primary shadow-sm"
-                              : "bg-muted/50 text-muted-foreground border-border hover:bg-muted hover:text-foreground"
-                          }`}
-                        >
-                          {eng.emoji} {eng.label}
-                        </button>
-                      </TooltipTrigger>
-                      <TooltipContent>{eng.desc}</TooltipContent>
-                    </Tooltip>
+                    <button
+                      key={eng.value}
+                      title={eng.desc}
+                      onClick={() => setInference(eng.value as any)}
+                      className={`h-9 rounded-lg text-xs font-medium transition-all border ${
+                        inference === eng.value
+                          ? "bg-gradient-to-r from-emerald-500 to-cyan-500 text-white border-transparent shadow-sm"
+                          : "bg-background text-muted-foreground border-border hover:bg-muted hover:text-foreground"
+                      }`}
+                    >
+                      {eng.emoji} {eng.label}
+                    </button>
                   ))}
                 </div>
+                <p className="text-[10px] text-muted-foreground/60">
+                  {INFERENCE_ENGINES.find(e => e.value === inference)?.desc}
+                </p>
               </div>
 
               {/* CTA */}
