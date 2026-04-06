@@ -12,7 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Star, Download, Calendar, Cpu, HardDrive, FileText, Sparkles, ArrowLeft, Copy, Check, MessageSquare, ExternalLink, Zap } from "lucide-react"
 import { useRouter, useParams } from "next/navigation"
 import { useState, useEffect, useMemo } from "react"
-import { format } from "date-fns"
+import { format, isValid } from "date-fns"
 
 export default function ModelPage() {
   const router = useRouter()
@@ -191,7 +191,9 @@ export default function ModelPage() {
 
                 <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-5">
                   <Calendar className="w-3.5 h-3.5" />
-                  Updated {format(new Date(enriched.updatedAt), "MMMM d, yyyy")}
+                  Updated {enriched.updatedAt && isValid(new Date(enriched.updatedAt))
+                    ? format(new Date(enriched.updatedAt), "MMMM d, yyyy")
+                    : "Unknown"}
                 </div>
               </CardContent>
             </Card>

@@ -1,9 +1,9 @@
 /**
  * HuggingFace Hub API Client
- * 
+ *
  * Handles all communication with the HF Models API.
- * Uses HF_TOKEN for authentication to get higher rate limits.
- * 
+ * Uses HF_TOKEN for authentication to get higher rate limits and full metadata.
+ *
  * API docs: https://huggingface.co/docs/hub/api
  */
 
@@ -107,7 +107,8 @@ export async function searchHFModels(params: HFSearchParams = {}): Promise<HFSea
   url.searchParams.set("sort", sort);
   url.searchParams.set("direction", String(direction));
 
-  if (search) url.searchParams.set("search", search);
+  // Only set search if caller actually passed a non-empty query
+  if (search && search.trim()) url.searchParams.set("search", search.trim());
   if (author) url.searchParams.set("author", author);
   if (pipeline_tag) url.searchParams.set("pipeline_tag", pipeline_tag);
   if (library) url.searchParams.set("library", library);
@@ -122,21 +123,22 @@ export async function searchHFModels(params: HFSearchParams = {}): Promise<HFSea
 
   const response = await fetch(url.toString(), {
     headers: getHeaders(),
-    next: { revalidate: 300 }, // Cache for 5 minutes
+    next: { revalidate: 300 },
   });
 
   if (!response.ok) {
     throw new Error("HF API error: " + response.status + " " + response.statusText);
   }
 
-  const totalHeader = response.headers.get("x-total-count") || "0";
-  const total = parseInt(totalHeader, 10) || 0;
-
   const models: HFModelResponse[] = await response.json();
+
+  // x-total-count may be absent for unauth requests — fall back to array length
+  const totalHeader = response.headers.get("x-total-count");
+  const total = totalHeader ? parseInt(totalHeader, 10) : models.length;
 
   return {
     models,
-    total,
+    total: total || models.length,
     hasMore: models.length === limit,
   };
 }
@@ -147,7 +149,7 @@ export async function getHFModel(modelId: string): Promise<HFModelResponse | nul
 
   const response = await fetch(url, {
     headers: getHeaders(),
-    next: { revalidate: 3600 }, // Cache for 1 hour
+    next: { revalidate: 3600 },
   });
 
   if (response.status === 404) return null;
@@ -169,15 +171,17 @@ export async function getHFModelCount(): Promise<number> {
 }
 
 export function extractParamCount(model: HFModelResponse): number | null {
+  // 1. Best source: safetensors metadata
   if (model.safetensors && model.safetensors.total) {
     return Math.round((model.safetensors.total / 1e9) * 100) / 100;
   }
 
+  // 2. Parse from model ID (e.g. "Llama-3.1-8B" → 8, "phi-3.5-mini" won't false-match)
   const id = model.id.toLowerCase();
-  const match = id.match(/(\d+\.?\d*)[bm]/);
+  const match = id.match(/(\d+\.?\d*)\s*[bm](?:[^a-z]|$)/i);
   if (match) {
     const num = parseFloat(match[1]);
-    const suffix = match[0].slice(-1).toLowerCase();
+    const suffix = match[0].replace(/[\d.\s]/g, "")[0].toLowerCase();
     if (suffix === "b") return num;
     if (suffix === "m") return num / 1000;
   }
@@ -197,34 +201,48 @@ export function extractModelSize(model: HFModelResponse) {
   };
 }
 
+/**
+ * Estimate model size in GB from param count when file size data is unavailable.
+ * Assumes Q4_K_M quantization (~4.5 bits/param → ~0.56 bytes/param) plus 5% overhead.
+ */
+function estimateSizeFromParams(paramCountB: number | null): number | null {
+  if (!paramCountB || paramCountB <= 0) return null;
+  return Math.round(paramCountB * 0.59 * 100) / 100;
+}
+
 export function hfToInternal(hfModel: HFModelResponse) {
   const paramCount = extractParamCount(hfModel);
   const sizeInfo = extractModelSize(hfModel);
-  
+
   const cardData = hfModel.cardData;
   const license = cardData && Array.isArray(cardData.license)
     ? (cardData.license as string[]).join(", ")
     : (cardData && cardData.license) || null;
 
+  // Use file-based size when available, otherwise estimate from param count
+  const estimatedSizeGB = sizeInfo
+    ? sizeInfo.totalGB
+    : estimateSizeFromParams(paramCount);
+
   return {
     modelId: hfModel.id,
-    author: hfModel.author,
+    author: hfModel.author || hfModel.id.split("/")[0] || "unknown",
     name: hfModel.id.split("/").pop() || hfModel.id,
     pipeline_tag: hfModel.pipeline_tag,
     taskId: hfModel.pipeline_tag,
     libraryName: (hfModel.cardData && hfModel.cardData.library_name) || null,
     tags: hfModel.tags || [],
-    downloads: hfModel.downloads,
-    likes: hfModel.likes,
-    createdAt: hfModel.lastModified,
-    updatedAt: hfModel.lastModified,
+    downloads: hfModel.downloads || 0,
+    likes: hfModel.likes || 0,
+    createdAt: hfModel.lastModified || new Date().toISOString(),
+    updatedAt: hfModel.lastModified || new Date().toISOString(),
     paramCount,
-    estimatedSizeGB: sizeInfo ? sizeInfo.totalGB : null,
+    estimatedSizeGB,
     quantization: null,
     format: hfModel.safetensors ? "safetensors" : (hfModel.cardData && hfModel.cardData.library_name) || null,
     contextLength: null,
     license,
-    trendingScore: Math.round(Math.log(hfModel.downloads + 1) * 10),
+    trendingScore: Math.round(Math.log((hfModel.downloads || 0) + 1) * 10),
     siblings: hfModel.siblings || [],
   };
 }

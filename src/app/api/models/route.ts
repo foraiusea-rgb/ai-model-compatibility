@@ -1,66 +1,67 @@
 import { NextRequest, NextResponse } from "next/server";
 import { searchHFModels, hfToInternal } from "@/lib/hf-api";
+import { MOCK_MODELS } from "@/lib/mock-data";
 
 /**
  * GET /api/models
- * 
- * Proxies HF Hub API requests with proper auth and rate limiting.
- * Returns paginated model list with compatibility scoring support.
- * 
+ *
+ * Proxies HF Hub API requests with auth and caching.
+ * Falls back to mock data if HF API fails (rate limit, network, etc).
+ *
  * Query params:
- * - q: search query
- * - limit: items per page (default 20)
- * - offset: page offset
+ * - q: search query (empty = top by downloads, which is what you want)
+ * - limit: items per page (default 40, max 100)
+ * - offset: pagination offset
  * - sort: downloads | likes | lastModified | createdAt | trending
  * - direction: 1 (asc) | -1 (desc)
  * - pipeline_tag: filter by task type
  * - author: filter by author
  * - format: gguf | safetensors | pytorch
- * - sizeMin / sizeMax: estimated size range in GB
- * - paramMin / paramMax: parameter count range in billions
  */
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
+    // q is only set if the user actually typed something — empty means "top models"
     const q = searchParams.get("q") || undefined;
-    const limit = Math.min(parseInt(searchParams.get("limit") || "20"), 100);
+    const limit = Math.min(parseInt(searchParams.get("limit") || "40"), 100);
     const offset = parseInt(searchParams.get("offset") || "0");
     const sort = (searchParams.get("sort") as any) || "downloads";
     const direction = searchParams.get("direction") === "1" ? 1 : -1;
     const pipeline_tag = searchParams.get("pipeline_tag") || undefined;
     const author = searchParams.get("author") || undefined;
 
-const validSorts = ["downloads", "likes", "lastModified", "createdAt"];
-  const hfSort = validSorts.includes(sort) ? sort : "downloads";
+    const validSorts = ["downloads", "likes", "lastModified", "createdAt", "trending"];
+    const hfSort = validSorts.includes(sort) ? sort : "downloads";
 
-  const result = await searchHFModels({
-    limit,
-    offset,
-    search: q || "model",
-    sort: hfSort as any,
-    direction,
-  });
+    const result = await searchHFModels({
+      limit,
+      offset,
+      search: q,
+      sort: hfSort as any,
+      direction: direction as -1 | 1,
+      pipeline_tag,
+      author,
+    });
 
-    // Convert HF responses to our internal format
     const models = result.models.map((m) => hfToInternal(m));
 
-    // Client-side filtering for size and params (HF API doesn't support these natively)
+    // Client-side size/param filtering (HF API doesn't support natively)
     let filtered = models;
     const sizeMin = parseFloat(searchParams.get("sizeMin") || "0");
     const sizeMax = parseFloat(searchParams.get("sizeMax") || "1000000");
     const paramMin = parseFloat(searchParams.get("paramMin") || "0");
     const paramMax = parseFloat(searchParams.get("paramMax") || "1000000");
 
-    if (!isNaN(sizeMin)) {
+    if (sizeMin > 0) {
       filtered = filtered.filter((m) => m.estimatedSizeGB == null || m.estimatedSizeGB >= sizeMin);
     }
-    if (!isNaN(sizeMax)) {
+    if (sizeMax < 1000000) {
       filtered = filtered.filter((m) => m.estimatedSizeGB == null || m.estimatedSizeGB <= sizeMax);
     }
-    if (!isNaN(paramMin)) {
+    if (paramMin > 0) {
       filtered = filtered.filter((m) => m.paramCount == null || m.paramCount >= paramMin);
     }
-    if (!isNaN(paramMax)) {
+    if (paramMax < 1000000) {
       filtered = filtered.filter((m) => m.paramCount == null || m.paramCount <= paramMax);
     }
 
@@ -83,10 +84,16 @@ const validSorts = ["downloads", "likes", "lastModified", "createdAt"];
       offset,
     });
   } catch (error: any) {
-    console.error("[API] Error fetching HF models:", error);
-    return NextResponse.json(
-      { error: error.message || "Failed to fetch models", fallback: true },
-      { status: 500 }
-    );
+    console.error("[API] HF fetch failed, returning mock data:", error.message);
+    // Fall back to mock data so the dashboard always shows something
+    return NextResponse.json({
+      models: MOCK_MODELS,
+      total: MOCK_MODELS.length,
+      hasMore: false,
+      page: 1,
+      limit: MOCK_MODELS.length,
+      offset: 0,
+      fallback: true,
+    });
   }
 }
