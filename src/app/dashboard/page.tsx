@@ -3,13 +3,14 @@
 import { useEffect, useState, useMemo, useCallback, useRef } from "react"
 import {
   Search, Grid, List, Filter, Zap, Loader2, Moon, Sun, AlertTriangle, RefreshCw,
-  Settings2, Sparkles, ArrowUpDown,
+  Settings2, Sparkles, ArrowUpDown, ChevronRight,
 } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
+import { Separator } from "@/components/ui/separator"
 import { useAppStore } from "@/store/use-app-store"
 import { computeCompatibility } from "@/lib/compatibility"
 import { useTheme } from "next-themes"
@@ -27,13 +28,21 @@ interface ApiResponse {
   fallback?: boolean
 }
 
-const SUGGESTED_SEARCHES = [
-  { label: "Text generation", query: "text-generation" },
-  { label: "Code models", query: "code llm" },
-  { label: "Image generation", query: "stable diffusion" },
-  { label: "Speech recognition", query: "whisper" },
-  { label: "Small models (<7B)", query: "3B instruct" },
+// Categories for the "Best for your hardware" section
+const CATEGORIES = [
+  { key: "text-generation", label: "Text generation", emoji: "💬", desc: "Chat, writing, reasoning" },
+  { key: "text-to-image", label: "Image generation", emoji: "🎨", desc: "Stable Diffusion, Flux" },
+  { key: "automatic-speech-recognition", label: "Speech to text", emoji: "🎙️", desc: "Whisper, transcription" },
+  { key: "text-to-speech", label: "Text to speech", emoji: "🔊", desc: "Voice synthesis" },
 ]
+
+function computeBestFitScore(model: ModelCard): number {
+  // Composite: compatibility score (0-100) weighted with download popularity
+  const compatWeight = 0.6
+  const popularityWeight = 0.4
+  const popularityScore = Math.min(100, Math.log10(model.downloads + 1) * 14)
+  return (model.compatibilityScore * compatWeight) + (popularityScore * popularityWeight)
+}
 
 export default function DashboardPage() {
   const router = useRouter()
@@ -41,7 +50,7 @@ export default function DashboardPage() {
   const { theme, setTheme } = useTheme()
   const [mounted, setMounted] = useState(false)
   const [searchInput, setSearchInput] = useState("")
-  const [sort, setSort] = useState("downloads")
+  const [sort, setSort] = useState("best-fit")
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid")
 
   const [rawModels, setRawModels] = useState<HFModel[]>([])
@@ -52,6 +61,7 @@ export default function DashboardPage() {
   const [offset, setOffset] = useState(0)
   const [hasMore, setHasMore] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
+  const [isSearching, setIsSearching] = useState(false)
 
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -75,6 +85,7 @@ export default function DashboardPage() {
       params.set("offset", String(pageOffset))
 
       const sortMap: Record<string, string> = {
+        "best-fit": "downloads",
         downloads: "downloads",
         likes: "likes",
         updated: "lastModified",
@@ -99,9 +110,7 @@ export default function DashboardPage() {
       setOffset(pageOffset + data.models.length)
     } catch (err: any) {
       console.error("Failed to fetch models:", err)
-      if (!append) {
-        setError(err.message || "Failed to load models")
-      }
+      if (!append) setError(err.message || "Failed to load models")
     } finally {
       setLoading(false)
       setLoadingMore(false)
@@ -114,14 +123,18 @@ export default function DashboardPage() {
     fetchModels("", sort, 0, false)
   }, [mounted, sort, fetchModels])
 
+  // Enrich with compatibility + best-fit score
   const modelCards: ModelCard[] = useMemo(() => {
-    return rawModels.map((m) => {
+    const enriched = rawModels.map((m) => {
       if (specs && m.estimatedSizeGB != null) {
         const compat = computeCompatibility(m.estimatedSizeGB, m.contextLength ?? null, specs)
         return { ...m, compatibility: compat.rating, compatibilityScore: compat.score, matchReason: compat.reason } as ModelCard
       }
-      return { ...m, compatibility: "unknown", compatibilityScore: 0, matchReason: "No specs configured" } as ModelCard
-    }).filter((m: ModelCard) => {
+      return { ...m, compatibility: "unknown" as const, compatibilityScore: 0, matchReason: "No specs configured" } as ModelCard
+    })
+
+    // Apply client-side filters
+    let filtered = enriched.filter((m: ModelCard) => {
       if (filters.compatibility.length > 0 && !filters.compatibility.includes(m.compatibility)) return false
       if (filters.searchQuery) {
         const q = filters.searchQuery.toLowerCase()
@@ -129,11 +142,31 @@ export default function DashboardPage() {
       }
       return true
     })
-  }, [rawModels, specs, filters.searchQuery, filters.compatibility])
+
+    // Sort by best-fit when that option is selected
+    if (sort === "best-fit" && specs) {
+      filtered.sort((a, b) => computeBestFitScore(b) - computeBestFitScore(a))
+    }
+
+    return filtered
+  }, [rawModels, specs, filters.searchQuery, filters.compatibility, sort])
+
+  // Category picks — top 4 models per category, sorted by best-fit
+  const categoryPicks = useMemo(() => {
+    if (!specs || isSearching) return []
+    return CATEGORIES.map((cat) => {
+      const matching = modelCards
+        .filter((m) => m.pipeline_tag === cat.key && m.compatibility !== "heavy" && m.compatibility !== "unknown")
+        .sort((a, b) => computeBestFitScore(b) - computeBestFitScore(a))
+        .slice(0, 4)
+      return { ...cat, models: matching }
+    }).filter((cat) => cat.models.length > 0)
+  }, [modelCards, specs, isSearching])
 
   const handleSearch = useCallback((value: string) => {
     setSearchInput(value)
     setFilters({ searchQuery: value })
+    setIsSearching(!!value.trim())
 
     if (searchTimeout.current) clearTimeout(searchTimeout.current)
     searchTimeout.current = setTimeout(() => {
@@ -141,13 +174,6 @@ export default function DashboardPage() {
       fetchModels(value, sort, 0, false)
     }, 400)
   }, [sort, fetchModels, setFilters])
-
-  const handleSuggestedSearch = (query: string) => {
-    setSearchInput(query)
-    setFilters({ searchQuery: query })
-    setOffset(0)
-    fetchModels(query, sort, 0, false)
-  }
 
   const handleLoadMore = () => {
     if (loadingMore || !hasMore) return
@@ -162,36 +188,45 @@ export default function DashboardPage() {
     )
   }
 
+  // Stats for the specs summary
+  const smoothCount = modelCards.filter(m => m.compatibility === "smooth").length
+  const slowCount = modelCards.filter(m => m.compatibility === "slow").length
+  const heavyCount = modelCards.filter(m => m.compatibility === "heavy").length
+
   return (
     <div className="flex h-screen overflow-hidden bg-background">
       {/* Desktop Sidebar */}
       <aside className="hidden xl:block w-64 flex-shrink-0 border-r bg-muted/20 overflow-y-auto">
         <div className="p-3 space-y-4">
-          {/* Specs summary */}
           {specs && hasEnteredSpecs && (
-            <div className="p-2.5 rounded-lg bg-muted/40 border border-border/50 space-y-1.5">
+            <div className="p-2.5 rounded-lg bg-muted/40 border border-border/50 space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Your specs</span>
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Your hardware</span>
                 <Button variant="ghost" size="sm" className="h-5 w-5 p-0" onClick={() => router.push("/")}>
                   <Settings2 className="w-3 h-3 text-muted-foreground" />
                 </Button>
               </div>
-              <div className="grid grid-cols-2 gap-1 text-[10px] font-mono text-muted-foreground">
+              <div className="grid grid-cols-2 gap-1 text-[10px] text-muted-foreground" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
                 <span>RAM: {specs.ramGB} GB</span>
                 <span>VRAM: {specs.vramGB ? `${specs.vramGB} GB` : "CPU"}</span>
                 <span>Cores: {specs.cpuCores}</span>
                 <span>Disk: {specs.diskFreeGB} GB</span>
+              </div>
+              <Separator className="my-1.5" />
+              <div className="flex gap-2 text-[10px]">
+                <span className="text-emerald-600 dark:text-emerald-400 font-medium">{smoothCount} smooth</span>
+                <span className="text-amber-600 dark:text-amber-400 font-medium">{slowCount} slow</span>
+                <span className="text-red-500 font-medium">{heavyCount} heavy</span>
               </div>
             </div>
           )}
           {!hasEnteredSpecs && (
             <div className="p-2.5 rounded-lg border border-dashed border-primary/30 bg-primary/5 space-y-2">
               <p className="text-[11px] text-muted-foreground leading-relaxed">
-                Add your hardware specs to see compatibility scores on every model.
+                Add your hardware specs to see compatibility scores and personalized recommendations.
               </p>
               <Button variant="outline" size="sm" className="h-6 text-[10px] gap-1 w-full" onClick={() => router.push("/")}>
-                <Settings2 className="w-3 h-3" />
-                Set up specs
+                <Settings2 className="w-3 h-3" />Set up specs
               </Button>
             </div>
           )}
@@ -199,7 +234,6 @@ export default function DashboardPage() {
         </div>
       </aside>
 
-      {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Top Bar */}
         <header className="border-b bg-background/80 backdrop-blur-md px-3 lg:px-5 py-2.5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between shrink-0">
@@ -211,22 +245,17 @@ export default function DashboardPage() {
               <span className="font-bold text-sm hidden sm:inline">ModelDB</span>
             </div>
 
-            {/* Mobile filter */}
             <Sheet>
               <SheetTrigger>
                 <Button variant="outline" size="sm" className="xl:hidden gap-1.5 shrink-0 h-8">
-                  <Filter className="w-3.5 h-3.5" />
-                  Filters
+                  <Filter className="w-3.5 h-3.5" />Filters
                 </Button>
               </SheetTrigger>
               <SheetContent side="left" className="w-72 p-0">
-                <div className="p-3">
-                  <FilterSidebar />
-                </div>
+                <div className="p-3"><FilterSidebar /></div>
               </SheetContent>
             </Sheet>
 
-            {/* Search */}
             <div className="relative flex-1 max-w-sm">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
               <Input
@@ -240,21 +269,19 @@ export default function DashboardPage() {
 
           <div className="flex items-center gap-1.5">
             <Badge variant="secondary" className="text-[10px] font-mono px-2 py-0 shrink-0">
-              {modelCards.length}{totalModels > modelCards.length ? ` / ${totalModels.toLocaleString()}` : ""} models
+              {modelCards.length} models
             </Badge>
             {isFallback && (
-              <Badge variant="outline" className="text-[10px] px-2 py-0 text-amber-600 border-amber-400 shrink-0">
-                offline
-              </Badge>
+              <Badge variant="outline" className="text-[10px] px-2 py-0 text-amber-600 border-amber-400 shrink-0">offline</Badge>
             )}
 
-            {/* Sort */}
             <Select value={sort} onValueChange={(v) => { if (v) setSort(v) }}>
               <SelectTrigger className="w-28 h-8 text-xs shrink-0 border-none bg-muted/30 gap-1">
                 <ArrowUpDown className="w-3 h-3 text-muted-foreground" />
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="best-fit">Best fit</SelectItem>
                 <SelectItem value="downloads">Downloads</SelectItem>
                 <SelectItem value="likes">Likes</SelectItem>
                 <SelectItem value="updated">Updated</SelectItem>
@@ -262,7 +289,6 @@ export default function DashboardPage() {
               </SelectContent>
             </Select>
 
-            {/* View toggle */}
             <div className="flex border rounded-md overflow-hidden shrink-0">
               <Button variant={viewMode === "grid" ? "default" : "ghost"} size="sm" className="h-7 w-7 p-0 rounded-none" onClick={() => setViewMode("grid")}>
                 <Grid className="w-3.5 h-3.5" />
@@ -272,126 +298,148 @@ export default function DashboardPage() {
               </Button>
             </div>
 
-            {/* Edit specs (mobile) */}
             <Button variant="ghost" size="sm" className="h-7 w-7 p-0 shrink-0 xl:hidden" onClick={() => router.push("/")}>
               <Settings2 className="w-3.5 h-3.5" />
             </Button>
-
-            {/* Theme toggle */}
             <Button variant="ghost" size="sm" className="h-7 w-7 p-0 shrink-0" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
               {theme === "dark" ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
             </Button>
           </div>
         </header>
 
-        {/* Active Filters Strip */}
+        {/* Active Filters */}
         {(filters.compatibility.length > 0 || filters.tasks.length > 0 || searchInput) && (
           <div className="px-3 py-1.5 border-b flex flex-wrap gap-1.5 items-center bg-muted/10">
             <span className="text-[10px] text-muted-foreground mr-0.5">Filters:</span>
             {searchInput && (
               <Badge variant="secondary" className="text-[10px] gap-0.5">
                 &quot;{searchInput}&quot;
-                <button className="ml-0.5 hover:text-foreground" onClick={() => { setSearchInput(""); setFilters({ searchQuery: "" }); setOffset(0); fetchModels("", sort, 0, false); }}>x</button>
+                <button className="ml-0.5 hover:text-foreground" onClick={() => { setSearchInput(""); setFilters({ searchQuery: "" }); setIsSearching(false); setOffset(0); fetchModels("", sort, 0, false); }}>x</button>
               </Badge>
             )}
             {filters.compatibility.map((c) => (
               <Badge key={c} variant="outline" className="text-[10px] gap-0.5">
-                {c}
-                <button className="ml-0.5 hover:text-foreground" onClick={() => setFilters({ compatibility: [] })}>x</button>
+                {c}<button className="ml-0.5 hover:text-foreground" onClick={() => setFilters({ compatibility: [] })}>x</button>
               </Badge>
             ))}
-            {filters.tasks.map((t) => (
-              <Badge key={t} variant="outline" className="text-[10px] gap-0.5">
-                {t}
-                <button className="ml-0.5 hover:text-foreground" onClick={() => setFilters({ tasks: [] })}>x</button>
-              </Badge>
-            ))}
-            <button className="text-[10px] text-primary hover:underline ml-1" onClick={() => { setSearchInput(""); setFilters({ compatibility: [], tasks: [], formats: [], licenses: [], searchQuery: "" }); setOffset(0); fetchModels("", sort, 0, false); }}>
+            <button className="text-[10px] text-primary hover:underline ml-1" onClick={() => { setSearchInput(""); setIsSearching(false); setFilters({ compatibility: [], tasks: [], formats: [], licenses: [], searchQuery: "" }); setOffset(0); fetchModels("", sort, 0, false); }}>
               Clear all
             </button>
           </div>
         )}
 
-        {/* Content Area */}
-        <main className="flex-1 overflow-y-auto p-3 lg:p-5">
-          {/* Loading state */}
+        {/* Content */}
+        <main className="flex-1 overflow-y-auto">
           {loading && (
             <div className="flex flex-col items-center justify-center py-20 gap-3">
               <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
-              <p className="text-sm text-muted-foreground">Loading models from HuggingFace...</p>
+              <p className="text-sm text-muted-foreground">Loading models...</p>
             </div>
           )}
 
-          {/* Error state */}
           {error && !loading && (
             <div className="flex flex-col items-center justify-center py-20 gap-4">
               <AlertTriangle className="w-10 h-10 text-amber-500" />
               <p className="text-sm text-muted-foreground">{error}</p>
               <Button variant="outline" size="sm" className="gap-2" onClick={() => fetchModels(searchInput, sort, 0, false)}>
-                <RefreshCw className="w-3.5 h-3.5" />
-                Retry
+                <RefreshCw className="w-3.5 h-3.5" />Retry
               </Button>
             </div>
           )}
 
-          {/* Empty state — rich with suggestions */}
           {!loading && !error && modelCards.length === 0 && (
             <div className="flex flex-col items-center justify-center py-16 gap-5 max-w-sm mx-auto text-center">
               <Sparkles className="w-10 h-10 text-muted-foreground/30" />
-              <div className="space-y-1.5">
-                <p className="text-sm font-medium">No models found</p>
-                <p className="text-xs text-muted-foreground">
-                  {searchInput ? "Try a different search term or browse by category." : "Try searching for a model or explore popular categories."}
-                </p>
-              </div>
+              <p className="text-sm font-medium">No models found</p>
+              <p className="text-xs text-muted-foreground">Try a different search or clear your filters.</p>
               {searchInput && (
-                <Button variant="outline" size="sm" onClick={() => { setSearchInput(""); setFilters({ searchQuery: "" }); setOffset(0); fetchModels("", sort, 0, false); }}>
+                <Button variant="outline" size="sm" onClick={() => { setSearchInput(""); setIsSearching(false); setFilters({ searchQuery: "" }); setOffset(0); fetchModels("", sort, 0, false); }}>
                   Clear search
                 </Button>
               )}
-              <div className="flex flex-wrap gap-1.5 justify-center">
-                {SUGGESTED_SEARCHES.map(({ label, query }) => (
-                  <Button key={query} variant="secondary" size="sm" className="h-7 text-[11px] px-2.5" onClick={() => handleSuggestedSearch(query)}>
-                    {label}
-                  </Button>
-                ))}
-              </div>
             </div>
           )}
 
-          {/* Model Grid */}
           {!loading && !error && modelCards.length > 0 && (
-            <>
-              <div
-                className={
-                  viewMode === "grid"
-                    ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-3"
-                    : "flex flex-col gap-2 max-w-4xl mx-auto"
-                }
-              >
-                {modelCards.map((model) => (
-                  <ModelGridItem
-                    key={model.modelId}
-                    model={model}
-                    isBookmarked={bookmarks.some((b) => b.modelId === model.modelId)}
-                    onToggleBookmark={(id) => {
-                      if (bookmarks.some((b) => b.modelId === id)) removeBookmark(id)
-                      else addBookmark(id)
-                    }}
-                  />
-                ))}
-              </div>
+            <div className="p-3 lg:p-5 space-y-8">
 
-              {/* Load More */}
-              {hasMore && (
-                <div className="flex justify-center pt-6 pb-4">
-                  <Button variant="outline" size="sm" className="gap-2" onClick={handleLoadMore} disabled={loadingMore}>
-                    {loadingMore ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
-                    {loadingMore ? "Loading..." : "Load more models"}
-                  </Button>
+              {/* Category Picks — only when specs are set and not searching */}
+              {categoryPicks.length > 0 && !isSearching && filters.compatibility.length === 0 && (
+                <div className="space-y-6">
+                  <div>
+                    <h2 className="text-lg font-bold flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-emerald-500" />
+                      Best for your hardware
+                    </h2>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Top compatible models per category, ranked by fit + popularity
+                    </p>
+                  </div>
+
+                  {categoryPicks.map((cat) => (
+                    <div key={cat.key}>
+                      <div className="flex items-center justify-between mb-2">
+                        <h3 className="text-sm font-semibold flex items-center gap-1.5">
+                          <span>{cat.emoji}</span>
+                          {cat.label}
+                          <span className="text-[10px] font-normal text-muted-foreground">{cat.desc}</span>
+                        </h3>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+                        {cat.models.map((model) => (
+                          <ModelGridItem
+                            key={model.modelId}
+                            model={model}
+                            isBookmarked={bookmarks.some((b) => b.modelId === model.modelId)}
+                            onToggleBookmark={(id) => {
+                              if (bookmarks.some((b) => b.modelId === id)) removeBookmark(id)
+                              else addBookmark(id)
+                            }}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+
+                  <Separator />
                 </div>
               )}
-            </>
+
+              {/* All Models grid */}
+              <div>
+                <h2 className="text-sm font-semibold text-muted-foreground mb-3">
+                  {isSearching ? `Results for "${searchInput}"` : "All models"}
+                </h2>
+                <div
+                  className={
+                    viewMode === "grid"
+                      ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-2.5"
+                      : "flex flex-col gap-2 max-w-4xl mx-auto"
+                  }
+                >
+                  {modelCards.map((model) => (
+                    <ModelGridItem
+                      key={model.modelId}
+                      model={model}
+                      isBookmarked={bookmarks.some((b) => b.modelId === model.modelId)}
+                      onToggleBookmark={(id) => {
+                        if (bookmarks.some((b) => b.modelId === id)) removeBookmark(id)
+                        else addBookmark(id)
+                      }}
+                    />
+                  ))}
+                </div>
+
+                {hasMore && (
+                  <div className="flex justify-center pt-6 pb-4">
+                    <Button variant="outline" size="sm" className="gap-2" onClick={handleLoadMore} disabled={loadingMore}>
+                      {loadingMore ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                      {loadingMore ? "Loading..." : "Load more models"}
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </div>
           )}
         </main>
       </div>
