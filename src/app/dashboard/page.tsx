@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo, useCallback, useRef } from "react"
 import {
   Search, Grid, List, Filter, Zap, Loader2, Moon, Sun, AlertTriangle, RefreshCw,
-  Settings2, Sparkles, ArrowUpDown, ChevronRight, Scale, Star,
+  Settings2, Sparkles, ArrowUpDown, ChevronRight, Scale, Star, ShieldCheck,
 } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
@@ -52,6 +52,7 @@ export default function DashboardPage() {
   const [searchInput, setSearchInput] = useState("")
   const [sort, setSort] = useState("best-fit")
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid")
+  const [whatFits, setWhatFits] = useState(false)
 
   const [rawModels, setRawModels] = useState<HFModel[]>([])
   const [totalModels, setTotalModels] = useState(0)
@@ -64,11 +65,54 @@ export default function DashboardPage() {
   const [isSearching, setIsSearching] = useState(false)
 
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const searchInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     loadFromStorage()
     setMounted(true)
   }, [loadFromStorage])
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    let gPressed = false
+    let gTimeout: ReturnType<typeof setTimeout> | null = null
+
+    const handler = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement
+      const isInput = target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable
+
+      // "/" focuses search (only when not in an input)
+      if (e.key === "/" && !isInput) {
+        e.preventDefault()
+        searchInputRef.current?.focus()
+        return
+      }
+
+      // Escape blurs search
+      if (e.key === "Escape" && document.activeElement === searchInputRef.current) {
+        searchInputRef.current?.blur()
+        return
+      }
+
+      // "g" followed by d/b/c for navigation
+      if (isInput) return
+      if (e.key === "g") {
+        gPressed = true
+        gTimeout = setTimeout(() => { gPressed = false }, 500)
+        return
+      }
+      if (gPressed) {
+        gPressed = false
+        if (gTimeout) clearTimeout(gTimeout)
+        if (e.key === "d") router.push("/dashboard")
+        else if (e.key === "b") router.push("/bookmarks")
+        else if (e.key === "c") router.push("/compare")
+      }
+    }
+
+    window.addEventListener("keydown", handler)
+    return () => window.removeEventListener("keydown", handler)
+  }, [router])
 
   const fetchModels = useCallback(async (query: string, sortBy: string, pageOffset: number, append: boolean) => {
     if (append) {
@@ -136,6 +180,7 @@ export default function DashboardPage() {
     // Apply client-side filters
     let filtered = enriched.filter((m: ModelCard) => {
       if (filters.compatibility.length > 0 && !filters.compatibility.includes(m.compatibility)) return false
+      if (whatFits && (m.compatibility === "heavy" || m.compatibility === "unknown")) return false
       if (filters.searchQuery) {
         const q = filters.searchQuery.toLowerCase()
         if (!m.modelId.toLowerCase().includes(q) && !(m.name || "").toLowerCase().includes(q) && !m.author.toLowerCase().includes(q)) return false
@@ -148,8 +193,13 @@ export default function DashboardPage() {
       filtered.sort((a, b) => computeBestFitScore(b) - computeBestFitScore(a))
     }
 
+    // When "what fits" is on, also sort by param count descending (most capable first)
+    if (whatFits && specs) {
+      filtered.sort((a, b) => (b.paramCount || 0) - (a.paramCount || 0))
+    }
+
     return filtered
-  }, [rawModels, specs, filters.searchQuery, filters.compatibility, sort])
+  }, [rawModels, specs, filters.searchQuery, filters.compatibility, sort, whatFits])
 
   // Category picks — top 4 models per category, sorted by best-fit
   const categoryPicks = useMemo(() => {
@@ -271,7 +321,8 @@ export default function DashboardPage() {
             <div className="relative flex-1 max-w-sm">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
               <Input
-                placeholder="Search models..."
+                ref={searchInputRef}
+                placeholder="Search models... ( / )"
                 value={searchInput}
                 onChange={(e) => handleSearch(e.target.value)}
                 className="pl-8 h-8 text-sm bg-muted/30 border-none focus-visible:ring-1"
@@ -280,6 +331,18 @@ export default function DashboardPage() {
           </div>
 
           <div className="flex items-center gap-1.5">
+            {/* "What fits" toggle */}
+            {specs && hasEnteredSpecs && (
+              <Button
+                variant={whatFits ? "default" : "outline"}
+                size="sm"
+                className={`h-7 text-[11px] gap-1 shrink-0 ${whatFits ? "bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-600" : ""}`}
+                onClick={() => setWhatFits(!whatFits)}
+              >
+                <ShieldCheck className="w-3 h-3" />
+                What fits
+              </Button>
+            )}
             <Badge variant="secondary" className="text-[10px] font-mono px-2 py-0 shrink-0">
               {modelCards.length} models
             </Badge>

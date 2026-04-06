@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Star, Download, Calendar, Cpu, HardDrive, FileText, Sparkles, ArrowLeft, Copy, Check, MessageSquare, ExternalLink, Zap, Moon, Sun, AlertTriangle } from "lucide-react"
+import { Star, Download, Calendar, Cpu, HardDrive, FileText, Sparkles, ArrowLeft, Copy, Check, MessageSquare, ExternalLink, Zap, Moon, Sun, AlertTriangle, Share2, Scale } from "lucide-react"
 import { useRouter, useParams } from "next/navigation"
 import { useState, useEffect, useMemo } from "react"
 import { format, isValid } from "date-fns"
@@ -72,6 +72,11 @@ export default function ModelPage() {
   const [copiedOllama, setCopiedOllama] = useState(false)
   const [copiedHG, setCopiedHG] = useState(false)
   const [isBookmarked, setIsBookmarked] = useState(false)
+  const [sharecopied, setSharecopied] = useState(false)
+
+  const addToCompare = useAppStore((s) => s.addToCompare)
+  const compareList = useAppStore((s) => s.compareList)
+  const isComparing = compareList.some(m => m.modelId === modelId)
 
   useEffect(() => { setMounted(true) }, [])
   useEffect(() => {
@@ -203,9 +208,29 @@ export default function ModelPage() {
           <div>
             <div className="flex items-center gap-3 mb-2">
               <h1 className="text-2xl lg:text-3xl font-bold font-mono">{enriched.name || enriched.modelId.split("/").pop()}</h1>
-              <Button variant="ghost" size="sm" onClick={() => { if (isBookmarked) removeBookmark(modelId); else addBookmark(modelId); setIsBookmarked(!isBookmarked) }}>
-                <Star className={`w-5 h-5 ${isBookmarked ? "fill-amber-400 text-amber-400" : "text-muted-foreground hover:text-amber-400"}`} />
-              </Button>
+              <div className="flex items-center gap-1">
+                <Button variant="ghost" size="sm" onClick={() => { if (isBookmarked) removeBookmark(modelId); else addBookmark(modelId); setIsBookmarked(!isBookmarked) }}>
+                  <Star className={`w-5 h-5 ${isBookmarked ? "fill-amber-400 text-amber-400" : "text-muted-foreground hover:text-amber-400"}`} />
+                </Button>
+                <Button variant="ghost" size="sm" title={isComparing ? "In compare list" : "Add to compare"} onClick={() => { if (!isComparing && model) addToCompare(model) }}>
+                  <Scale className={`w-4 h-4 ${isComparing ? "text-primary" : "text-muted-foreground hover:text-primary"}`} />
+                </Button>
+                <Button variant="ghost" size="sm" title="Share this result" onClick={() => {
+                  const url = new URL("/share", window.location.origin)
+                  url.searchParams.set("model", enriched.modelId)
+                  if (specs) {
+                    url.searchParams.set("ram", String(specs.ramGB))
+                    if (specs.vramGB) url.searchParams.set("vram", String(specs.vramGB))
+                    url.searchParams.set("cores", String(specs.cpuCores))
+                    url.searchParams.set("disk", String(specs.diskFreeGB))
+                  }
+                  navigator.clipboard.writeText(url.toString())
+                  setSharecopied(true)
+                  setTimeout(() => setSharecopied(false), 2000)
+                }}>
+                  {sharecopied ? <Check className="w-4 h-4 text-emerald-500" /> : <Share2 className="w-4 h-4 text-muted-foreground hover:text-foreground" />}
+                </Button>
+              </div>
             </div>
             <p className="text-muted-foreground">
               by <span className="font-medium text-foreground">{enriched.author}</span>
