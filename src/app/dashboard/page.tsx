@@ -3,6 +3,7 @@
 import { useEffect, useState, useMemo, useCallback, useRef } from "react"
 import {
   Search, Grid, List, Filter, Zap, Loader2, Moon, Sun, AlertTriangle, RefreshCw,
+  Settings2, Sparkles, ArrowUpDown,
 } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
@@ -26,16 +27,23 @@ interface ApiResponse {
   fallback?: boolean
 }
 
+const SUGGESTED_SEARCHES = [
+  { label: "Text generation", query: "text-generation" },
+  { label: "Code models", query: "code llm" },
+  { label: "Image generation", query: "stable diffusion" },
+  { label: "Speech recognition", query: "whisper" },
+  { label: "Small models (<7B)", query: "3B instruct" },
+]
+
 export default function DashboardPage() {
   const router = useRouter()
-  const { specs, loadFromStorage, bookmarks, addBookmark, removeBookmark, filters, setFilters } = useAppStore()
+  const { specs, loadFromStorage, bookmarks, addBookmark, removeBookmark, filters, setFilters, hasEnteredSpecs } = useAppStore()
   const { theme, setTheme } = useTheme()
   const [mounted, setMounted] = useState(false)
   const [searchInput, setSearchInput] = useState("")
   const [sort, setSort] = useState("downloads")
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid")
 
-  // API state
   const [rawModels, setRawModels] = useState<HFModel[]>([])
   const [totalModels, setTotalModels] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -45,7 +53,6 @@ export default function DashboardPage() {
   const [hasMore, setHasMore] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
 
-  // Debounce search
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
@@ -53,7 +60,6 @@ export default function DashboardPage() {
     setMounted(true)
   }, [loadFromStorage])
 
-  // Fetch models from API
   const fetchModels = useCallback(async (query: string, sortBy: string, pageOffset: number, append: boolean) => {
     if (append) {
       setLoadingMore(true)
@@ -68,7 +74,6 @@ export default function DashboardPage() {
       params.set("limit", String(PAGE_SIZE))
       params.set("offset", String(pageOffset))
 
-      // Map sort values to HF API sort params
       const sortMap: Record<string, string> = {
         downloads: "downloads",
         likes: "likes",
@@ -103,14 +108,12 @@ export default function DashboardPage() {
     }
   }, [])
 
-  // Initial fetch + refetch on sort change
   useEffect(() => {
     if (!mounted) return
     setOffset(0)
     fetchModels("", sort, 0, false)
   }, [mounted, sort, fetchModels])
 
-  // Enrich with compatibility scores
   const modelCards: ModelCard[] = useMemo(() => {
     return rawModels.map((m) => {
       if (specs && m.estimatedSizeGB != null) {
@@ -132,13 +135,19 @@ export default function DashboardPage() {
     setSearchInput(value)
     setFilters({ searchQuery: value })
 
-    // Debounce API search — only fire after user stops typing for 400ms
     if (searchTimeout.current) clearTimeout(searchTimeout.current)
     searchTimeout.current = setTimeout(() => {
       setOffset(0)
       fetchModels(value, sort, 0, false)
     }, 400)
   }, [sort, fetchModels, setFilters])
+
+  const handleSuggestedSearch = (query: string) => {
+    setSearchInput(query)
+    setFilters({ searchQuery: query })
+    setOffset(0)
+    fetchModels(query, sort, 0, false)
+  }
 
   const handleLoadMore = () => {
     if (loadingMore || !hasMore) return
@@ -157,7 +166,35 @@ export default function DashboardPage() {
     <div className="flex h-screen overflow-hidden bg-background">
       {/* Desktop Sidebar */}
       <aside className="hidden xl:block w-64 flex-shrink-0 border-r bg-muted/20 overflow-y-auto">
-        <div className="p-3">
+        <div className="p-3 space-y-4">
+          {/* Specs summary */}
+          {specs && hasEnteredSpecs && (
+            <div className="p-2.5 rounded-lg bg-muted/40 border border-border/50 space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Your specs</span>
+                <Button variant="ghost" size="sm" className="h-5 w-5 p-0" onClick={() => router.push("/")}>
+                  <Settings2 className="w-3 h-3 text-muted-foreground" />
+                </Button>
+              </div>
+              <div className="grid grid-cols-2 gap-1 text-[10px] font-mono text-muted-foreground">
+                <span>RAM: {specs.ramGB} GB</span>
+                <span>VRAM: {specs.vramGB ? `${specs.vramGB} GB` : "CPU"}</span>
+                <span>Cores: {specs.cpuCores}</span>
+                <span>Disk: {specs.diskFreeGB} GB</span>
+              </div>
+            </div>
+          )}
+          {!hasEnteredSpecs && (
+            <div className="p-2.5 rounded-lg border border-dashed border-primary/30 bg-primary/5 space-y-2">
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                Add your hardware specs to see compatibility scores on every model.
+              </p>
+              <Button variant="outline" size="sm" className="h-6 text-[10px] gap-1 w-full" onClick={() => router.push("/")}>
+                <Settings2 className="w-3 h-3" />
+                Set up specs
+              </Button>
+            </div>
+          )}
           <FilterSidebar />
         </div>
       </aside>
@@ -213,7 +250,8 @@ export default function DashboardPage() {
 
             {/* Sort */}
             <Select value={sort} onValueChange={(v) => { if (v) setSort(v) }}>
-              <SelectTrigger className="w-24 h-8 text-xs shrink-0 border-none bg-muted/30">
+              <SelectTrigger className="w-28 h-8 text-xs shrink-0 border-none bg-muted/30 gap-1">
+                <ArrowUpDown className="w-3 h-3 text-muted-foreground" />
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -234,6 +272,11 @@ export default function DashboardPage() {
               </Button>
             </div>
 
+            {/* Edit specs (mobile) */}
+            <Button variant="ghost" size="sm" className="h-7 w-7 p-0 shrink-0 xl:hidden" onClick={() => router.push("/")}>
+              <Settings2 className="w-3.5 h-3.5" />
+            </Button>
+
             {/* Theme toggle */}
             <Button variant="ghost" size="sm" className="h-7 w-7 p-0 shrink-0" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
               {theme === "dark" ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
@@ -248,22 +291,22 @@ export default function DashboardPage() {
             {searchInput && (
               <Badge variant="secondary" className="text-[10px] gap-0.5">
                 &quot;{searchInput}&quot;
-                <button className="ml-0.5 hover:text-foreground" onClick={() => { setSearchInput(""); setFilters({ searchQuery: "" }); setOffset(0); fetchModels("", sort, 0, false); }}>×</button>
+                <button className="ml-0.5 hover:text-foreground" onClick={() => { setSearchInput(""); setFilters({ searchQuery: "" }); setOffset(0); fetchModels("", sort, 0, false); }}>x</button>
               </Badge>
             )}
             {filters.compatibility.map((c) => (
               <Badge key={c} variant="outline" className="text-[10px] gap-0.5">
                 {c}
-                <button className="ml-0.5 hover:text-foreground" onClick={() => setFilters({ compatibility: [] })}>×</button>
+                <button className="ml-0.5 hover:text-foreground" onClick={() => setFilters({ compatibility: [] })}>x</button>
               </Badge>
             ))}
             {filters.tasks.map((t) => (
               <Badge key={t} variant="outline" className="text-[10px] gap-0.5">
                 {t}
-                <button className="ml-0.5 hover:text-foreground" onClick={() => setFilters({ tasks: [] })}>×</button>
+                <button className="ml-0.5 hover:text-foreground" onClick={() => setFilters({ tasks: [] })}>x</button>
               </Badge>
             ))}
-            <button className="text-[10px] text-primary hover:underline ml-1" onClick={() => setFilters({ compatibility: [], tasks: [], formats: [], licenses: [], searchQuery: "" })}>
+            <button className="text-[10px] text-primary hover:underline ml-1" onClick={() => { setSearchInput(""); setFilters({ compatibility: [], tasks: [], formats: [], licenses: [], searchQuery: "" }); setOffset(0); fetchModels("", sort, 0, false); }}>
               Clear all
             </button>
           </div>
@@ -291,15 +334,28 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {/* Empty state */}
+          {/* Empty state — rich with suggestions */}
           {!loading && !error && modelCards.length === 0 && (
-            <div className="flex flex-col items-center justify-center py-20 gap-3">
-              <p className="text-sm text-muted-foreground">No models found.</p>
+            <div className="flex flex-col items-center justify-center py-16 gap-5 max-w-sm mx-auto text-center">
+              <Sparkles className="w-10 h-10 text-muted-foreground/30" />
+              <div className="space-y-1.5">
+                <p className="text-sm font-medium">No models found</p>
+                <p className="text-xs text-muted-foreground">
+                  {searchInput ? "Try a different search term or browse by category." : "Try searching for a model or explore popular categories."}
+                </p>
+              </div>
               {searchInput && (
                 <Button variant="outline" size="sm" onClick={() => { setSearchInput(""); setFilters({ searchQuery: "" }); setOffset(0); fetchModels("", sort, 0, false); }}>
                   Clear search
                 </Button>
               )}
+              <div className="flex flex-wrap gap-1.5 justify-center">
+                {SUGGESTED_SEARCHES.map(({ label, query }) => (
+                  <Button key={query} variant="secondary" size="sm" className="h-7 text-[11px] px-2.5" onClick={() => handleSuggestedSearch(query)}>
+                    {label}
+                  </Button>
+                ))}
+              </div>
             </div>
           )}
 

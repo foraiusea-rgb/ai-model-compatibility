@@ -1,12 +1,20 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger,
 } from "@/components/ui/dialog"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { HelpCircle, Terminal, Monitor, Copy, Check, Database, Cpu, HardDrive } from "lucide-react"
+
+function detectOS(): "windows" | "macos" | "linux" {
+  if (typeof navigator === "undefined") return "windows"
+  const ua = navigator.userAgent.toLowerCase()
+  if (ua.includes("mac")) return "macos"
+  if (ua.includes("linux") || ua.includes("x11")) return "linux"
+  return "windows"
+}
 
 function CopyCommand({ command }: { command: string }) {
   const [copied, setCopied] = useState(false)
@@ -60,110 +68,114 @@ function SpecBlock({ icon, label, guiPath, command, tip }: SpecBlockProps) {
 const ICON_CLASS = "w-3.5 h-3.5 text-muted-foreground shrink-0"
 
 export function SpecsHelperDialog() {
+  const [defaultOS, setDefaultOS] = useState<"windows" | "macos" | "linux">("windows")
+
+  useEffect(() => {
+    setDefaultOS(detectOS())
+  }, [])
+
   return (
     <Dialog>
       <DialogTrigger>
         <button className="inline-flex items-center gap-1.5 text-xs text-muted-foreground/70 hover:text-primary transition-colors group">
           <HelpCircle className="w-3.5 h-3.5 group-hover:text-primary transition-colors" />
-          How do I find my specs?
+          How do I find these?
         </button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Monitor className="w-4 h-4" />
-            Finding Your Hardware Specs
+            Finding your hardware specs
           </DialogTitle>
           <DialogDescription>
             Quick ways to find the 4 values you need. Click any command to copy it.
           </DialogDescription>
         </DialogHeader>
 
-        <Tabs defaultValue="windows">
+        <Tabs defaultValue={defaultOS} key={defaultOS}>
           <TabsList className="w-full">
-            <TabsTrigger value="windows" className="flex-1 text-xs">🪟 Windows</TabsTrigger>
-            <TabsTrigger value="macos" className="flex-1 text-xs">🍎 macOS</TabsTrigger>
-            <TabsTrigger value="linux" className="flex-1 text-xs">🐧 Linux</TabsTrigger>
+            <TabsTrigger value="windows" className="flex-1 text-xs">Windows</TabsTrigger>
+            <TabsTrigger value="macos" className="flex-1 text-xs">macOS</TabsTrigger>
+            <TabsTrigger value="linux" className="flex-1 text-xs">Linux</TabsTrigger>
           </TabsList>
 
-          {/* ── Windows ── */}
+          {/* Windows */}
           <TabsContent value="windows" className="space-y-4 pt-3">
             <div className="space-y-1 mb-3">
               <p className="text-[11px] text-muted-foreground">
                 <span className="font-semibold text-foreground">Quickest way:</span>{" "}
-                Open <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-mono">Task Manager</Badge> → Performance tab. RAM, CPU cores, and GPU VRAM are all visible at a glance.
+                Open <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-mono">Task Manager</Badge> (Ctrl+Shift+Esc) and go to the Performance tab. RAM, CPU cores, and GPU VRAM are all visible.
               </p>
             </div>
-
             <SpecBlock
               icon={<Database className={ICON_CLASS} />}
               label="RAM"
-              guiPath="Settings → System → About → 'Installed RAM'"
+              guiPath="Settings > System > About > Installed RAM"
               command={`systeminfo | findstr "Total Physical Memory"`}
-              tip="Or just check Task Manager → Performance → Memory"
+              tip="Or just check Task Manager > Performance > Memory"
             />
             <SpecBlock
               icon={<Monitor className={ICON_CLASS} />}
-              label="VRAM (GPU Memory)"
-              guiPath="Task Manager → Performance → GPU → 'Dedicated GPU Memory'"
+              label="VRAM (GPU memory)"
+              guiPath="Task Manager > Performance > GPU > Dedicated GPU Memory"
               command="nvidia-smi --query-gpu=memory.total --format=csv,noheader"
-              tip="No GPU or AMD? Try: Settings → Display → Advanced display → Display adapter properties"
+              tip="No GPU or AMD? Try: Settings > Display > Advanced display > Display adapter properties"
             />
             <SpecBlock
               icon={<Cpu className={ICON_CLASS} />}
-              label="CPU Cores"
-              guiPath="Task Manager → Performance → CPU → 'Cores' (bottom right)"
+              label="CPU cores"
+              guiPath="Task Manager > Performance > CPU > Cores (bottom right)"
               command="echo %NUMBER_OF_PROCESSORS%"
               tip="This shows logical cores (threads). Physical cores are half this for most CPUs."
             />
             <SpecBlock
               icon={<HardDrive className={ICON_CLASS} />}
-              label="Free Disk Space"
-              guiPath="File Explorer → This PC → check the bar under your drive"
+              label="Free disk space"
+              guiPath="File Explorer > This PC > check the bar under your drive"
               command={`wmic logicaldisk get freespace,caption`}
-              tip="Models download to your main drive. Check whichever drive you'll use."
+              tip="Models download to your main drive. Check whichever drive you plan to use."
             />
           </TabsContent>
 
-          {/* ── macOS ── */}
+          {/* macOS */}
           <TabsContent value="macos" className="space-y-4 pt-3">
             <div className="space-y-1 mb-3">
               <p className="text-[11px] text-muted-foreground">
                 <span className="font-semibold text-foreground">Quickest way:</span>{" "}
-                 → About This Mac shows RAM and chip info. For Apple Silicon, VRAM = unified memory (same as RAM).
+                Apple menu &gt; About This Mac shows RAM and chip info. For Apple Silicon, VRAM = unified memory (same as RAM).
               </p>
             </div>
-
             <SpecBlock
               icon={<Database className={ICON_CLASS} />}
               label="RAM"
-              guiPath=" → About This Mac → 'Memory'"
+              guiPath="Apple menu > About This Mac > Memory"
               command={`sysctl -n hw.memsize | awk '{print $0/1073741824" GB"}'`}
               tip="Apple Silicon shares RAM between CPU and GPU — enter the same value for both."
             />
             <SpecBlock
               icon={<Monitor className={ICON_CLASS} />}
-              label="VRAM (GPU Memory)"
-              guiPath="Apple Silicon: same as RAM. Intel Mac: About This Mac → Displays → VRAM"
+              label="VRAM (GPU memory)"
+              guiPath="Apple Silicon: same as RAM. Intel Mac: About This Mac > Displays > VRAM"
               command={`system_profiler SPDisplaysDataType | grep "VRAM\\|Chipset Model"`}
               tip="M1/M2/M3/M4 have unified memory — your full RAM is available as VRAM."
             />
             <SpecBlock
               icon={<Cpu className={ICON_CLASS} />}
-              label="CPU Cores"
-              guiPath=" → About This Mac → chip name tells you (e.g. M2 = 8 cores)"
+              label="CPU cores"
+              guiPath="Apple menu > About This Mac > chip name (e.g. M2 = 8 cores)"
               command="sysctl -n hw.ncpu"
               tip="Shows total threads. For physical cores: sysctl -n hw.physicalcpu"
             />
             <SpecBlock
               icon={<HardDrive className={ICON_CLASS} />}
-              label="Free Disk Space"
-              guiPath=" → About This Mac → Storage"
+              label="Free disk space"
+              guiPath="Apple menu > About This Mac > Storage"
               command={`df -h / | awk 'NR==2{print $4" free"}'`}
             />
           </TabsContent>
 
-          {/* ── Linux ── */}
+          {/* Linux */}
           <TabsContent value="linux" className="space-y-4 pt-3">
             <div className="space-y-1 mb-3">
               <p className="text-[11px] text-muted-foreground">
@@ -171,31 +183,30 @@ export function SpecsHelperDialog() {
                 Run <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-mono">neofetch</Badge> or <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-mono">fastfetch</Badge> for a quick summary of everything.
               </p>
             </div>
-
             <SpecBlock
               icon={<Database className={ICON_CLASS} />}
               label="RAM"
-              guiPath="System Monitor / System Settings → About (varies by distro)"
+              guiPath="System Monitor / System Settings > About (varies by distro)"
               command={`free -h | awk '/Mem:/{print $2}'`}
             />
             <SpecBlock
               icon={<Monitor className={ICON_CLASS} />}
-              label="VRAM (GPU Memory)"
-              guiPath="NVIDIA: nvidia-settings → GPU Information"
+              label="VRAM (GPU memory)"
+              guiPath="NVIDIA: nvidia-settings > GPU Information"
               command="nvidia-smi --query-gpu=memory.total --format=csv,noheader"
               tip={`AMD: cat /sys/class/drm/card0/device/mem_info_vram_total | awk '{print $0/1073741824"GB"}'`}
             />
             <SpecBlock
               icon={<Cpu className={ICON_CLASS} />}
-              label="CPU Cores"
-              guiPath="System Monitor → Resources, or /proc/cpuinfo"
+              label="CPU cores"
+              guiPath="System Monitor > Resources, or /proc/cpuinfo"
               command="nproc"
               tip="Physical cores only: lscpu | grep 'Core(s) per socket'"
             />
             <SpecBlock
               icon={<HardDrive className={ICON_CLASS} />}
-              label="Free Disk Space"
-              guiPath="Files app → Properties on your drive, or Disks utility"
+              label="Free disk space"
+              guiPath="Files app > Properties on your drive, or Disks utility"
               command={`df -h / | awk 'NR==2{print $4" free"}'`}
             />
           </TabsContent>

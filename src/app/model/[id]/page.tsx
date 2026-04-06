@@ -9,16 +9,28 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Star, Download, Calendar, Cpu, HardDrive, FileText, Sparkles, ArrowLeft, Copy, Check, MessageSquare, ExternalLink, Zap } from "lucide-react"
+import { Star, Download, Calendar, Cpu, HardDrive, FileText, Sparkles, ArrowLeft, Copy, Check, MessageSquare, ExternalLink, Zap, Moon, Sun } from "lucide-react"
 import { useRouter, useParams } from "next/navigation"
 import { useState, useEffect, useMemo } from "react"
 import { format, isValid } from "date-fns"
+import { useTheme } from "next-themes"
+
+function getMatchReasonStyle(compat: string): string {
+  switch (compat) {
+    case "smooth": return "bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-400"
+    case "slow": return "bg-amber-500/10 border-amber-500/30 text-amber-700 dark:text-amber-400"
+    case "heavy": return "bg-red-500/10 border-red-500/30 text-red-700 dark:text-red-400"
+    default: return "bg-muted/50 border-border text-muted-foreground"
+  }
+}
 
 export default function ModelPage() {
   const router = useRouter()
   const params = useParams()
   const modelId = decodeURIComponent(params.id as string)
   const { specs, bookmarks, addBookmark, removeBookmark, openrouterApiKey, setApiKey, openrouterModel } = useAppStore()
+  const { theme, setTheme } = useTheme()
+  const [mounted, setMounted] = useState(false)
 
   const model = useMemo(() => MOCK_MODELS.find((m) => m.modelId === modelId), [modelId])
 
@@ -33,9 +45,11 @@ export default function ModelPage() {
 
   const [aiSummary, setAiSummary] = useState<string | null>(null)
   const [aiLoading, setAiLoading] = useState(false)
-  const [copied, setCopied] = useState(false)
+  const [copiedOllama, setCopiedOllama] = useState(false)
+  const [copiedHG, setCopiedHG] = useState(false)
   const [isBookmarked, setIsBookmarked] = useState(false)
 
+  useEffect(() => { setMounted(true) }, [])
   useEffect(() => {
     if (model) {
       setIsBookmarked(bookmarks.some((b) => b.modelId === modelId))
@@ -55,10 +69,15 @@ export default function ModelPage() {
   const downloadCmdOllama = `ollama pull ${enriched.name?.toLowerCase().replace(/[^\w]/g, "-") || "model-name"}`
   const downloadCmdHG = `huggingface-cli download ${enriched.modelId}`
 
-  const handleCopy = (cmd: string) => {
+  const handleCopy = (cmd: string, which: "ollama" | "hg") => {
     navigator.clipboard.writeText(cmd)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+    if (which === "ollama") {
+      setCopiedOllama(true)
+      setTimeout(() => setCopiedOllama(false), 2000)
+    } else {
+      setCopiedHG(true)
+      setTimeout(() => setCopiedHG(false), 2000)
+    }
   }
 
   const handleAISummary = async () => {
@@ -91,6 +110,18 @@ export default function ModelPage() {
     }
   }
 
+  // Critical specs (elevated) vs secondary specs
+  const criticalSpecs = [
+    { label: "Parameters", value: enriched.paramCount ? `${enriched.paramCount}B` : "N/A", icon: Cpu },
+    { label: "Estimated size", value: enriched.estimatedSizeGB ? `~${enriched.estimatedSizeGB.toFixed(1)} GB` : "N/A", icon: HardDrive },
+    { label: "Context length", value: enriched.contextLength ? `${enriched.contextLength.toLocaleString()} tokens` : "N/A", icon: FileText },
+  ]
+  const secondarySpecs = [
+    { label: "Downloads", value: enriched.downloads >= 1000000 ? `${(enriched.downloads / 1000000).toFixed(1)}M` : enriched.downloads >= 1000 ? `${(enriched.downloads / 1000).toFixed(0)}K` : enriched.downloads.toString() },
+    { label: "License", value: enriched.license || "N/A" },
+    { label: "Format", value: enriched.format?.toUpperCase() || "N/A" },
+  ]
+
   return (
     <div className="min-h-screen bg-background">
       {/* Nav */}
@@ -101,21 +132,26 @@ export default function ModelPage() {
             Back
           </Button>
           <Separator orientation="vertical" className="h-5" />
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 cursor-pointer" onClick={() => router.push("/")}>
             <div className="w-7 h-7 rounded-lg bg-primary flex items-center justify-center">
               <Zap className="w-3.5 h-3.5 text-primary-foreground" />
             </div>
             <span className="font-bold text-sm">ModelDB</span>
           </div>
         </div>
+        {mounted && (
+          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
+            {theme === "dark" ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
+          </Button>
+        )}
       </header>
 
       <div className="max-w-6xl mx-auto px-4 lg:px-6 py-8">
         {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4 mb-8">
+        <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4 mb-6">
           <div>
             <div className="flex items-center gap-3 mb-2">
-              <h1 className="text-2xl lg:text-3xl font-bold">{enriched.name || enriched.modelId.split("/").pop()}</h1>
+              <h1 className="text-2xl lg:text-3xl font-bold font-mono">{enriched.name || enriched.modelId.split("/").pop()}</h1>
               <Button
                 variant="ghost"
                 size="sm"
@@ -130,23 +166,23 @@ export default function ModelPage() {
             </div>
             <p className="text-muted-foreground">
               by <span className="font-medium text-foreground">{enriched.author}</span>
-              {" · "}
+              {" \u00B7 "}
               <span className="font-mono text-xs">{enriched.modelId}</span>
             </p>
           </div>
 
           {enriched.compatibility !== "unknown" && (
-            <Badge variant="outline" className={`text-sm font-medium self-start ${getCompatibilityColor(enriched.compatibility)}`}>
+            <Badge variant="outline" className={`text-sm font-semibold self-start px-3 py-1 ${getCompatibilityColor(enriched.compatibility)}`}>
               <span className="mr-1">{getCompatibilityIcon(enriched.compatibility)}</span>
               {getCompatibilityLabel(enriched.compatibility)}
             </Badge>
           )}
         </div>
 
-        {/* Match Reason */}
+        {/* Match Reason — colored by compatibility */}
         {enriched.matchReason && enriched.compatibility !== "unknown" && (
-          <div className="mb-6 p-4 rounded-xl bg-muted/50 border text-sm">
-            <p className="text-muted-foreground">{enriched.matchReason}</p>
+          <div className={`mb-6 p-4 rounded-xl border text-sm ${getMatchReasonStyle(enriched.compatibility)}`}>
+            <p>{enriched.matchReason}</p>
           </div>
         )}
 
@@ -157,27 +193,31 @@ export default function ModelPage() {
               <CardHeader>
                 <CardTitle className="text-base">Specifications</CardTitle>
               </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-2 gap-x-8 gap-y-5">
-                  {[
-                    { label: "Parameters", value: enriched.paramCount ? `${enriched.paramCount}B` : "N/A", icon: Cpu },
-                    { label: "Quantized Size", value: enriched.estimatedSizeGB ? `~${enriched.estimatedSizeGB.toFixed(1)} GB` : "N/A", icon: HardDrive },
-                    { label: "Context Length", value: enriched.contextLength ? `${enriched.contextLength.toLocaleString()} tokens` : "N/A", icon: FileText },
-                    { label: "Downloads", value: enriched.downloads >= 1000000 ? `${(enriched.downloads / 1000000).toFixed(1)}M` : enriched.downloads >= 1000 ? `${(enriched.downloads / 1000).toFixed(0)}K` : enriched.downloads.toString(), icon: Download },
-                    { label: "License", value: enriched.license || "N/A", icon: null },
-                    { label: "Format", value: enriched.format?.toUpperCase() || "N/A", icon: null },
-                  ].map(({ label, value, icon: Icon }) => (
-                    <div key={label}>
-                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1">
-                        {Icon && <Icon className="w-3.5 h-3.5" />}
+              <CardContent className="space-y-5">
+                {/* Critical specs — elevated with background */}
+                <div className="grid grid-cols-3 gap-3">
+                  {criticalSpecs.map(({ label, value, icon: Icon }) => (
+                    <div key={label} className="p-3 rounded-lg bg-muted/40 border border-border/50 text-center">
+                      <div className="flex items-center justify-center gap-1.5 text-[10px] text-muted-foreground mb-1">
+                        <Icon className="w-3 h-3" />
                         {label}
                       </div>
+                      <p className="text-base font-semibold font-mono">{value}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Secondary specs — simpler row */}
+                <div className="grid grid-cols-3 gap-x-6 gap-y-3">
+                  {secondarySpecs.map(({ label, value }) => (
+                    <div key={label}>
+                      <div className="text-[10px] text-muted-foreground mb-0.5">{label}</div>
                       <p className="text-sm font-medium">{value}</p>
                     </div>
                   ))}
                 </div>
 
-                <Separator className="my-5" />
+                <Separator />
 
                 {/* Tags */}
                 <div className="flex flex-wrap gap-2">
@@ -189,7 +229,7 @@ export default function ModelPage() {
                   ))}
                 </div>
 
-                <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-5">
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                   <Calendar className="w-3.5 h-3.5" />
                   Updated {enriched.updatedAt && isValid(new Date(enriched.updatedAt))
                     ? format(new Date(enriched.updatedAt), "MMMM d, yyyy")
@@ -198,15 +238,16 @@ export default function ModelPage() {
               </CardContent>
             </Card>
 
-            {/* Tags from HuggingFace */}
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" className="gap-1.5" onClick={() => window.open(`https://huggingface.co/${enriched.modelId}`, "_blank", "noopener,noreferrer")}>
-                <a href={`https://huggingface.co/${enriched.modelId}`} target="_blank" rel="noopener noreferrer">
-                  <ExternalLink className="w-3.5 h-3.5" />
-                  View on HuggingFace
-                </a>
-              </Button>
-            </div>
+            {/* HuggingFace link — fixed: no nested button/a */}
+            <a
+              href={`https://huggingface.co/${enriched.modelId}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg border border-border bg-background hover:bg-muted transition-colors"
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+              View on HuggingFace
+            </a>
           </div>
 
           {/* RIGHT: Actions (2 cols) */}
@@ -216,21 +257,21 @@ export default function ModelPage() {
               <CardHeader>
                 <CardTitle className="text-base flex items-center gap-2">
                   <Download className="w-4 h-4" />
-                  Quick Download
+                  Quick download
                 </CardTitle>
                 <CardDescription>Run these commands in your terminal</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
                 <div className="flex items-center gap-2 p-3 bg-muted/50 rounded-lg group">
                   <code className="flex-1 text-xs font-mono break-all">{downloadCmdOllama}</code>
-                  <Button variant="ghost" size="sm" className="h-7 w-7 p-0 shrink-0" onClick={() => handleCopy(downloadCmdOllama)}>
-                    {copied ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5 text-muted-foreground" />}
+                  <Button variant="ghost" size="sm" className="h-7 w-7 p-0 shrink-0" onClick={() => handleCopy(downloadCmdOllama, "ollama")}>
+                    {copiedOllama ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5 text-muted-foreground" />}
                   </Button>
                 </div>
                 <div className="flex items-center gap-2 p-3 bg-muted/50 rounded-lg">
                   <code className="flex-1 text-xs font-mono break-all">{downloadCmdHG}</code>
-                  <Button variant="ghost" size="sm" className="h-7 w-7 p-0 shrink-0" onClick={() => handleCopy(downloadCmdHG)}>
-                    <Copy className="w-3.5 h-3.5 text-muted-foreground" />
+                  <Button variant="ghost" size="sm" className="h-7 w-7 p-0 shrink-0" onClick={() => handleCopy(downloadCmdHG, "hg")}>
+                    {copiedHG ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5 text-muted-foreground" />}
                   </Button>
                 </div>
               </CardContent>
@@ -241,27 +282,28 @@ export default function ModelPage() {
               <CardHeader>
                 <CardTitle className="text-base flex items-center gap-2">
                   <MessageSquare className="w-4 h-4" />
-                  AI Recommendation
+                  AI recommendation
                 </CardTitle>
                 <CardDescription>Get personalized advice based on your hardware</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 {!openrouterApiKey ? (
                   <div className="space-y-3">
-                    <p className="text-sm text-muted-foreground">Enter your OpenRouter API key to generate AI-powered recommendations. Your key is stored locally only.</p>
+                    <p className="text-sm text-muted-foreground">
+                      This uses <a href="https://openrouter.ai" target="_blank" rel="noopener noreferrer" className="text-primary underline underline-offset-2">OpenRouter</a> to generate recommendations. Free tier models are available. Your key stays in your browser and is never sent to our servers.
+                    </p>
                     <input
                       type="password"
                       placeholder="sk-or-v1-..."
                       className="flex-1 w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary/50"
                       onChange={(e) => setApiKey(e.target.value)}
                     />
-                    <p className="text-xs text-muted-foreground">Key stored in browser localStorage. Never sent to our servers.</p>
                   </div>
                 ) : (
                   <div className="space-y-3">
                     <Button onClick={handleAISummary} disabled={aiLoading} className="gap-2 w-full">
                       <Sparkles className="w-4 h-4" />
-                      {aiLoading ? "Analyzing..." : "Generate Recommendation"}
+                      {aiLoading ? "Analyzing..." : "Generate recommendation"}
                     </Button>
                     {aiSummary && (
                       <div className="p-4 bg-muted/50 rounded-lg text-sm leading-relaxed whitespace-pre-wrap border">
