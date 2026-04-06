@@ -1,31 +1,14 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
-import { MOCK_MODELS } from "@/lib/mock-data"
+import { useState, useEffect, useMemo, useRef, useCallback } from "react"
 import { computeCompatibility } from "@/lib/compatibility"
-import type { ModelCard, CompatibilityRating } from "@/types/model"
-
-// Zustand for state
-import { create } from "zustand"
 import { loadPreferences } from "@/lib/storage"
-
-// Icons only
 import {
   Search, Grid, List, Filter, Zap, Loader2, Moon, Sun,
   Star, Download, Clock, Cpu, HardDrive, ChevronDown, ChevronRight,
 } from "lucide-react"
 
-// Custom store - no hooks here, just state
-const useStore = create<{
-  filters: {
-    search: string
-    compat: CompatibilityRating[]
-  }
-  setFilters: (f: Partial<{ search: string; compat: CompatibilityRating[] }>) => void
-}>((set) => ({
-  filters: { search: "", compat: [] },
-  setFilters: (f) => set((s) => ({ filters: { ...s.filters, ...f } })),
-}))
+// ── Utility functions ──
 
 function relativeDate(dateStr: string): string {
   try {
@@ -43,166 +26,79 @@ function relativeDate(dateStr: string): string {
 
 function getCompatBadge(rating: string) {
   switch (rating) {
-    case "smooth": return { color: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30", label: "✓ Runs Smoothly" }
-    case "slow": return { color: "bg-amber-500/20 text-amber-400 border-amber-500/30", label: "⚠ Runs Slow" }
-    case "heavy": return { color: "bg-red-500/20 text-red-400 border-red-500/30", label: "✗ Too Heavy" }
-    default: return { color: "bg-muted text-muted-foreground border-border", label: "?" }
+    case "smooth": return { color: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30", label: "✓ Smooth" }
+    case "slow": return { color: "bg-amber-500/20 text-amber-400 border-amber-500/30", label: "⚠ Slow" }
+    case "heavy": return { color: "bg-red-500/20 text-red-400 border-red-500/30", label: "✗ Heavy" }
+    default: return { color: "bg-muted text-muted-foreground border-border", label: "Unknown" }
   }
 }
 
-// Simple Input component
+// ── Simple UI Components (pure HTML, no @base-ui) ──
+
 function Input(props: any) {
-  return (
-    <input
-      {...props}
-      className={`px-3 py-1.5 text-sm bg-muted/30 border border-border rounded-md focus:outline-none focus:ring-1 focus:ring-primary ${props.className || ""}`}
-    />
-  )
+  return <input {...props} className={`px-3 py-1.5 text-sm bg-muted/30 border border-border rounded-md focus:outline-none focus:ring-1 focus:ring-primary ${props.className || ""}`} />
 }
 
-// Simple Select component
-function SelectComp({ value, onValueChange, icon: Icon, children }: any) {
-  const [open, setOpen] = useState(false)
-  return (
-    <div className="relative">
-      <button onClick={() => setOpen(!open)} className="h-7 px-2.5 text-xs rounded-md bg-muted/30 border border-border flex items-center gap-1">
-        {Icon && <Icon className="w-3 h-3" />}
-        <span>{value}</span>
-      </button>
-      {open && (
-        <div className="absolute top-full mt-1 right-0 bg-popover border rounded-md shadow-lg z-50 min-w-[120px]">
-          {(children as any[]).map((child: any, i: number) => (
-            <button
-              key={i}
-              onClick={() => { onValueChange(child.value); setOpen(false) }}
-              className="block w-full text-left px-3 py-1.5 text-xs hover:bg-muted/50"
-            >
-              {child.label}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  )
+function Badge({ children, className }: { children: React.ReactNode; className?: string }) {
+  return <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${className || ""}`}>{children}</span>
 }
 
-// Simple Card component
-function Card({ children, onClick, className }: any) {
+function Card({ children, onClick, className, onMouseEnter, onMouseLeave }: { children: React.ReactNode; onClick?: () => void; className?: string; onMouseEnter?: () => void; onMouseLeave?: () => void }) {
   return (
-    <div
-      onClick={onClick}
-      className={`rounded-lg border border-border/60 bg-card/50 backdrop-blur-sm cursor-pointer hover:border-primary/40 hover:shadow-lg hover:shadow-primary/5 transition-all duration-200 ${className || ""}`}
-    >
+    <div onClick={onClick} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave} className={`rounded-lg border border-border/60 bg-card/50 backdrop-blur-sm cursor-pointer hover:border-primary/40 hover:shadow-lg hover:shadow-primary/5 transition-all duration-200 ${className || ""}`}>
       {children}
     </div>
   )
 }
 
-// Simple CardContent
-function CardContent({ children, className }: any) {
+function CardContent({ children, className }: { children: React.ReactNode; className?: string }) {
   return <div className={`p-4 ${className || ""}`}>{children}</div>
 }
 
-// Simple Badge
-function Badge({ children, className }: any) {
-  return (
-    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${className || ""}`}>
-      {children}
-    </span>
-  )
-}
+// ── Model Card Component ──
 
-// Simple Filter Sidebar
-function FilterSidebar({ compact }: { compact?: boolean }) {
-  const { filters, setFilters } = useStore()
-
-  const compatOptions: { label: string; value: CompatibilityRating }[] = [
-    { label: "✓ Smooth", value: "smooth" },
-    { label: "⚠ Slow", value: "slow" },
-    { label: "✗ Heavy", value: "heavy" },
-  ]
-
-  const taskOptions = [
-    "text-generation", "text-to-image", "text-to-speech", "image-classification", "speech-to-text"
-  ]
-
-  return (
-    <div className={compact ? "space-y-3 text-xs" : "space-y-4"}>
-      <div className="flex items-center justify-between px-2">
-        <h3 className="font-semibold text-sm">Filters</h3>
-        <button onClick={() => setFilters({ search: "", compat: [] })} className="text-[10px] text-muted-foreground hover:text-foreground">Reset</button>
-      </div>
-
-      <div className="space-y-1">
-        <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Compatibility</div>
-        {compatOptions.map((opt) => (
-          <label key={opt.value} className="flex items-center gap-2 px-2 py-1.5 hover:bg-muted/40 rounded-md cursor-pointer">
-            <input
-              type="checkbox"
-              checked={filters.compat.includes(opt.value)}
-              onChange={() => {
-                const newCompat = filters.compat.includes(opt.value)
-                  ? filters.compat.filter((c) => c !== opt.value)
-                  : [...filters.compat, opt.value]
-                setFilters({ compat: newCompat })
-              }}
-              className="h-3 w-3"
-            />
-            <span className="text-xs select-none">{opt.label}</span>
-          </label>
-        ))}
-      </div>
-
-      <div className="space-y-1">
-        <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Tasks</div>
-        {taskOptions.map((task) => (
-          <label key={task} className="flex items-center gap-2 px-2 py-1.5 hover:bg-muted/40 rounded-md cursor-pointer">
-            <input type="checkbox" className="h-3 w-3" />
-            <span className="text-xs select-none">{task.replace(/-/g, " ")}</span>
-          </label>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-// Simple Model Card
-// Simple Model Card
 function ModelCard({ model, specs }: { model: any; specs: any }) {
+  const [hovered, setHovered] = useState(false)
+  
   const compat = useMemo(() => {
     if (specs && model.estimatedSizeGB != null) {
       return computeCompatibility(model.estimatedSizeGB, model.contextLength || null, specs)
     }
     return null
-  }, [specs, model])
+  }, [specs, model.estimatedSizeGB, model.contextLength])
 
   const badge = compat ? getCompatBadge(compat.rating) : null
   const dlDisplay = model.downloads >= 1000000 ? `${(model.downloads / 1000000).toFixed(1)}M` : model.downloads >= 1000 ? `${(model.downloads / 1000).toFixed(0)}K` : model.downloads.toString()
-  const timeAgo = relativeDate(model.updatedAt || model.lastModified || "")
+  const timeAgo = relativeDate(model.updatedAt || model.lastModified || model.createdAt || "")
 
   return (
-    <Card onClick={() => console.log("View:", model.modelId)}>
+    <Card onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}>
       <CardContent className="space-y-3">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0 flex-1">
-            <h3 className="font-semibold text-sm truncate">{model.name || model.modelId.split("/").pop()}</h3>
-            <p className="text-[11px] text-muted-foreground/70 truncate">{model.author}</p>
+            <h3 className="font-semibold text-sm truncate">{model.name || model.modelId?.split("/").pop() || model.id || "?"}</h3>
+            <p className="text-[11px] text-muted-foreground/70 truncate">{model.author || "unknown"}</p>
           </div>
-          <button className="opacity-0 group-hover:opacity-100 transition-opacity">
-            <Star className="w-3.5 h-3.5 text-muted-foreground" />
-          </button>
+          {hovered && (
+            <button className="shrink-0">
+              <Star className="w-3.5 h-3.5 text-muted-foreground hover:text-amber-400" />
+            </button>
+          )}
         </div>
 
         {badge && <Badge className={badge.color}>{badge.label}</Badge>}
 
-        <div className="flex items-center gap-1.5 text-muted-foreground/60">
-          <HardDrive className="w-3 h-3" />
-          <span className="text-xs font-mono">~{model.estimatedSizeGB?.toFixed(1) || "?"} GB</span>
-        </div>
+        {model.estimatedSizeGB != null && (
+          <div className="flex items-center gap-1.5 text-muted-foreground/60">
+            <HardDrive className="w-3 h-3" />
+            <span className="text-xs font-mono">~{model.estimatedSizeGB.toFixed(1)} GB</span>
+          </div>
+        )}
 
         <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground/60">
           <div className="flex items-center gap-1"><Download className="w-3 h-3" /><span>{dlDisplay}</span></div>
-          <div className="flex items-center gap-1"><Clock className="w-3 h-3" /><span>{timeAgo}</span></div>
+          {timeAgo && <div className="flex items-center gap-1"><Clock className="w-3 h-3" /><span>{timeAgo}</span></div>}
+          {model.paramCount && <div className="flex items-center gap-1"><Cpu className="w-3 h-3" /><span>{model.paramCount}B</span></div>}
         </div>
 
         {model.pipeline_tag && (
@@ -215,50 +111,169 @@ function ModelCard({ model, specs }: { model: any; specs: any }) {
   )
 }
 
+// ── Filter Sidebar ──
+
+function FilterSidebar({ compatFilter, setCompatFilter }: { compatFilter: Set<string>; setCompatFilter: (f: Set<string>) => void }) {
+  const compatOptions = [
+    { label: "✓ Smooth", value: "smooth" },
+    { label: "⚠ Slow", value: "slow" },
+    { label: "✗ Heavy", value: "heavy" },
+  ]
+
+  const toggleCompat = (value: string) => {
+    const next = new Set(compatFilter)
+    if (next.has(value)) next.delete(value)
+    else next.add(value)
+    setCompatFilter(next)
+  }
+
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center justify-between px-2 pb-2">
+        <h3 className="font-semibold text-sm">Filters</h3>
+        <button onClick={() => setCompatFilter(new Set())} className="text-[10px] text-muted-foreground hover:text-foreground">Reset</button>
+      </div>
+
+      <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Compatibility</div>
+      {compatOptions.map((opt) => (
+        <label key={opt.value} className="flex items-center gap-2 px-2 py-1.5 hover:bg-muted/40 rounded-md cursor-pointer">
+          <input type="checkbox" checked={compatFilter.has(opt.value)} onChange={() => toggleCompat(opt.value)} className="h-3 w-3" />
+          <span className="text-xs select-none">{opt.label}</span>
+        </label>
+      ))}
+    </div>
+  )
+}
+
+// ── Sort Dropdown (pure HTML) ──
+
+function SortDropdown({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [open, setOpen] = useState(false)
+  const options = [
+    { value: "downloads", label: "Downloads" },
+    { value: "likes", label: "Likes" },
+    { value: "lastModified", label: "Updated" },
+  ]
+
+  if (!open) {
+    return (
+      <button onClick={() => setOpen(true)} className="h-7 px-2.5 text-xs rounded-md bg-muted/30 border border-border flex items-center gap-1 hover:bg-muted/50">
+        <Zap className="w-3 h-3" />
+        <span>{options.find(o => o.value === value)?.label || value}</span>
+        <ChevronDown className="w-3 h-3" />
+      </button>
+    )
+  }
+
+  return (
+    <div className="relative">
+      <button onClick={() => setOpen(false)} className="h-7 px-2.5 text-xs rounded-md bg-muted/30 border border-border flex items-center gap-1">
+        <Zap className="w-3 h-3" />
+        <span>{options.find(o => o.value === value)?.label || value}</span>
+        <ChevronRight className="w-3 h-3 rotate-90" />
+      </button>
+      <div className="absolute top-full mt-1 right-0 bg-popover border rounded-md shadow-lg z-50 min-w-[120px] overflow-hidden">
+        {options.map((opt) => (
+          <button
+            key={opt.value}
+            onClick={() => { onChange(opt.value); setOpen(false) }}
+            className="block w-full text-left px-3 py-1.5 text-xs hover:bg-muted/50"
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ── Close dropdown on outside click (use inside SortDropdown) ──
+// Simplified: click the button again closes it
+
+// ── Main Dashboard Page ──
+
 export default function DashboardPage() {
   const [mounted, setMounted] = useState(false)
-  const [theme, setTheme] = useState<"dark" | "light">("dark")
+  const [theme, setThemeState] = useState<"dark" | "light">("dark")
   const [searchInput, setSearchInput] = useState("")
   const [sort, setSort] = useState("downloads")
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid")
   const [specs, setSpecs] = useState<any>(null)
+  const [models, setModels] = useState<any[]>([])
+  const [totalModels, setTotalModels] = useState(0)
+  const [loading, setLoading] = useState(true)
+  const [apiError, setApiError] = useState<string | null>(null)
+  const [compatFilter, setCompatFilter] = useState<Set<string>>(new Set())
+  const searchTimeout = useRef<ReturnType<typeof setTimeout>>(null)
 
-  // Load specs from storage
+  // Load settings
   useEffect(() => {
     loadPreferences().then((prefs) => {
       if (prefs.specs) setSpecs(prefs.specs)
-      if (prefs.theme === "light" || prefs.theme === "system") setTheme("light")
+      if (prefs.theme === "light") setThemeState("light")
     })
     setMounted(true)
   }, [])
 
-  const { filters, setFilters } = useStore()
+  // Fetch models
+  const fetchModels = useCallback(async (searchQuery: string, sortOrder: string) => {
+    setLoading(true)
+    setApiError(null)
+    try {
+      const params = new URLSearchParams()
+      params.set("limit", "60")
+      params.set("sort", sortOrder)
+      if (searchQuery) params.set("q", searchQuery)
 
-  // Sync search with global filters
+      const res = await fetch(`/api/models?${params.toString()}`)
+      if (!res.ok) throw new Error(`Server returned ${res.status}`)
+      const data = await res.json()
+      setModels(data.models || [])
+      setTotalModels(data.total || 0)
+    } catch (err: any) {
+      setApiError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  // Initial fetch
   useEffect(() => {
-    setFilters({ search: searchInput })
-  }, [searchInput, setFilters])
+    if (mounted) fetchModels("", "downloads")
+  }, [mounted, fetchModels])
 
-  // Get models
-  const enrichedModels = useMemo(() => {
-    return MOCK_MODELS.filter((m) => {
-      const compat = specs && m.estimatedSizeGB != null ? computeCompatibility(m.estimatedSizeGB, m.contextLength || null, specs) : null
-      const rating = compat?.rating || "unknown"
+  // Debounced search
+  const handleSearch = (value: string) => {
+    setSearchInput(value)
+    if (searchTimeout.current) clearTimeout(searchTimeout.current)
+    searchTimeout.current = setTimeout(() => {
+      fetchModels(value, sort)
+    }, 500)
+  }
 
-      if (filters.compat.length > 0 && !filters.compat.includes(rating as any)) return false
-      return true
-    }).map((m) => {
-      const compat = specs && m.estimatedSizeGB != null ? computeCompatibility(m.estimatedSizeGB, m.contextLength || null, specs) : { rating: "unknown", score: 0, reason: "No specs" }
-      return { ...m, compatibility: compat.rating, compatibilityScore: compat.score }
-    })
-  }, [specs, filters.compat])
+  const handleSort = (value: string) => {
+    setSort(value)
+    fetchModels(searchInput, value)
+  }
 
-  const handleSortChange = (v: string) => setSort(v)
   const toggleTheme = () => {
     const next = theme === "dark" ? "light" : "dark"
-    setTheme(next)
+    setThemeState(next)
     document.documentElement.classList.toggle("dark", next === "dark")
   }
+
+  // Apply filters to loaded models
+  const filteredModels = useMemo(() => {
+    const withCompat = models.map((m) => {
+      const compat = specs && m.estimatedSizeGB != null
+        ? computeCompatibility(m.estimatedSizeGB, m.contextLength || null, specs)
+        : { rating: "unknown" as const, score: 0 }
+      return { ...m, compatibility: compat.rating, compatibilityScore: compat.score }
+    })
+    
+    if (compatFilter.size === 0) return withCompat
+    return withCompat.filter((m) => compatFilter.has(m.compatibility))
+  }, [models, specs, compatFilter])
 
   if (!mounted) {
     return (
@@ -272,8 +287,8 @@ export default function DashboardPage() {
     <div className={theme === "light" ? "" : "dark"}>
       <div className="flex h-screen overflow-hidden bg-background text-foreground">
         {/* Sidebar */}
-        <aside className="hidden xl:block w-64 flex-shrink-0 border-r bg-muted/20 overflow-y-auto p-3">
-          <FilterSidebar />
+        <aside className="hidden xl:block w-60 flex-shrink-0 border-r bg-muted/20 overflow-y-auto p-3">
+          <FilterSidebar compatFilter={compatFilter} setCompatFilter={setCompatFilter} />
         </aside>
 
         {/* Main Content */}
@@ -281,7 +296,7 @@ export default function DashboardPage() {
           {/* Top Bar */}
           <header className="border-b bg-background/80 backdrop-blur-md px-3 py-2.5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between shrink-0">
             <div className="flex items-center gap-2 flex-1">
-              <div className="flex items-center gap-2 cursor-pointer" onClick={() => window.location.href = "/"}>
+              <div className="flex items-center gap-2 cursor-pointer" onClick={() => (window.location.href = "/")}>
                 <div className="w-7 h-7 rounded-lg bg-primary flex items-center justify-center">
                   <Zap className="w-3.5 h-3.5 text-primary-foreground" />
                 </div>
@@ -290,29 +305,19 @@ export default function DashboardPage() {
               <div className="relative flex-1 max-w-sm">
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
                 <Input
-                  placeholder="Search 2.7M+ models..."
+                  placeholder={totalModels > 0 ? `Search ${totalModels.toLocaleString()} models...` : "Search models..."}
                   value={searchInput}
-                  onChange={(e: any) => setSearchInput(e.target.value)}
+                  onChange={(e: any) => handleSearch(e.target.value)}
                   className="pl-8 h-8 text-sm"
                 />
               </div>
             </div>
 
             <div className="flex items-center gap-1.5">
-              <Badge className="text-[10px] font-mono px-2 py-0">{enrichedModels.length} models</Badge>
-
-              <SelectComp value={sort} onValueChange={handleSortChange} icon={Zap}>
-                {[
-                  { value: "downloads", label: "Downloads" },
-                  { value: "likes", label: "Likes" },
-                  { value: "updated", label: "Updated" },
-                ].map((opt) => (
-                  <div key={opt.value} onClick={() => { handleSortChange(opt.value); }} className="block w-full text-left px-3 py-1.5 text-xs hover:bg-muted/50 cursor-pointer">
-                    {opt.label}
-                  </div>
-                ))}
-              </SelectComp>
-
+              <Badge className="text-[10px] font-mono px-2 py-0">
+                {totalModels > 0 ? totalModels.toLocaleString() : "—"} shown
+              </Badge>
+              <SortDropdown value={sort} onChange={handleSort} />
               <div className="flex border rounded-md overflow-hidden">
                 <button onClick={() => setViewMode("grid")} className={`h-7 w-7 flex items-center justify-center ${viewMode === "grid" ? "bg-primary text-primary-foreground" : "bg-background text-foreground"}`}>
                   <Grid className="w-3.5 h-3.5" />
@@ -321,20 +326,50 @@ export default function DashboardPage() {
                   <List className="w-3.5 h-3.5" />
                 </button>
               </div>
-
-              <button onClick={toggleTheme} className="h-7 w-7 flex items-center justify-center">
+              <button onClick={toggleTheme} className="h-7 w-7 flex items-center justify-center rounded-md hover:bg-muted/50">
                 {theme === "dark" ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
               </button>
             </div>
           </header>
 
-          {/* Model Grid */}
-          <main className="flex-1 overflow-y-auto p-3 lg:p-5">
-            <div className={viewMode === "grid" ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-3" : "flex flex-col gap-2 max-w-4xl mx-auto"}>
-              {enrichedModels.map((model) => (
-                <ModelCard key={model.modelId} model={model} specs={specs} />
+          {/* Filter strip */}
+          {compatFilter.size > 0 && (
+            <div className="px-3 py-1.5 border-b flex flex-wrap gap-1.5 items-center bg-muted/10">
+              <span className="text-[10px] text-muted-foreground mr-0.5">Filters:</span>
+              {Array.from(compatFilter).map((c) => (
+                <Badge key={c} className="text-[10px] gap-0.5 border">
+                  {c}
+                  <button className="ml-0.5 hover:text-foreground" onClick={() => { const next = new Set(compatFilter); next.delete(c); setCompatFilter(next) }}>×</button>
+                </Badge>
               ))}
+              <button className="text-[10px] text-primary hover:underline ml-1" onClick={() => setCompatFilter(new Set())}>Clear all</button>
             </div>
+          )}
+
+          {/* Content */}
+          <main className="flex-1 overflow-y-auto p-3 lg:p-5">
+            {loading ? (
+              <div className="flex items-center justify-center h-64">
+                <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                <span className="ml-3 text-sm text-muted-foreground">Loading from HuggingFace...</span>
+              </div>
+            ) : apiError ? (
+              <div className="flex flex-col items-center justify-center h-64 text-center">
+                <p className="text-red-400 font-medium">{apiError}</p>
+                <button onClick={() => fetchModels(searchInput, sort)} className="mt-3 text-sm text-primary hover:underline">Retry</button>
+              </div>
+            ) : filteredModels.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-64 text-center text-muted-foreground">
+                <p className="text-lg font-medium">No models match your filters</p>
+                <button onClick={() => setCompatFilter(new Set())} className="mt-3 text-sm text-primary hover:underline">Clear filters</button>
+              </div>
+            ) : (
+              <div className={viewMode === "grid" ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-3" : "flex flex-col gap-2 max-w-4xl mx-auto"}>
+                {filteredModels.map((model) => (
+                  <ModelCard key={model.modelId || model.id} model={model} specs={specs} />
+                ))}
+              </div>
+            )}
           </main>
         </div>
       </div>
