@@ -12,6 +12,7 @@ import { useState } from "react"
 import { useAppStore } from "@/store/use-app-store"
 import { useRouter } from "next/navigation"
 import type { HardwareSpecs } from "@/types/model"
+import { SpecsHelperDialog } from "@/components/specs-helper-dialog"
 
 const INFERENCE_ENGINES = [
   { value: "ollama", label: "Ollama", emoji: "🦙" },
@@ -111,6 +112,9 @@ export function HeroSpecInput() {
           </div>
 
           {/* Spec Input Card - Cleaned up */}
+          <div className="flex justify-end -mb-4">
+            <SpecsHelperDialog />
+          </div>
           <Card className="border shadow-2xl shadow-black/20 bg-card/80 backdrop-blur-sm">
             <CardContent className="p-6 space-y-5">
               {/* Row 1: RAM + GPU */}
