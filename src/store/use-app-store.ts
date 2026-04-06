@@ -1,9 +1,8 @@
 import { create } from 'zustand'
-import type { HardwareSpecs, Bookmark, CompatibilityRating, UserPreferences, Filters, DEFAULT_FILTERS } from '@/types/model'
+import type { HardwareSpecs, Bookmark, CompatibilityRating, UserPreferences, Filters, HFModel, DEFAULT_FILTERS } from '@/types/model'
 import { savePreferences, loadPreferences } from '@/lib/storage'
 
 interface AppState {
-  // Preferences
   specs: HardwareSpecs | null
   bookmarks: Bookmark[]
   openrouterApiKey: string
@@ -11,11 +10,13 @@ interface AppState {
   theme: "dark" | "light" | "system"
   filterPresets: Record<string, unknown>
 
-  // UI state
   filters: typeof DEFAULT_FILTERS
   selectedModelId: string | null
   hasEnteredSpecs: boolean
   isLoading: boolean
+
+  // Compare (in-memory, up to 3 models)
+  compareList: HFModel[]
 
   // Actions
   loadFromStorage: () => Promise<void>
@@ -31,10 +32,13 @@ interface AppState {
   setLoading: (v: boolean) => void
   exportData: () => Promise<string>
   importData: (json: string) => Promise<boolean>
+  addToCompare: (model: HFModel) => void
+  removeFromCompare: (modelId: string) => void
+  clearCompare: () => void
+  isInCompare: (modelId: string) => boolean
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
-  // Initial state
   specs: null,
   bookmarks: [],
   openrouterApiKey: "",
@@ -57,6 +61,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   selectedModelId: null,
   hasEnteredSpecs: false,
   isLoading: false,
+  compareList: [],
 
   loadFromStorage: async () => {
     const prefs = await loadPreferences()
@@ -108,14 +113,27 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   setFilters: (filters) => {
-    set((state) => ({
-      filters: { ...state.filters, ...filters },
-    }))
+    set((state) => ({ filters: { ...state.filters, ...filters } }))
   },
 
   setSelectedModelId: (id) => set({ selectedModelId: id }),
   setHasEnteredSpecs: (v) => set({ hasEnteredSpecs: v }),
   setLoading: (v) => set({ isLoading: v }),
+
+  addToCompare: (model) => {
+    const { compareList } = get()
+    if (compareList.length >= 3) return
+    if (compareList.some(m => m.modelId === model.modelId)) return
+    set({ compareList: [...compareList, model] })
+  },
+
+  removeFromCompare: (modelId) => {
+    set({ compareList: get().compareList.filter(m => m.modelId !== modelId) })
+  },
+
+  clearCompare: () => set({ compareList: [] }),
+
+  isInCompare: (modelId) => get().compareList.some(m => m.modelId === modelId),
 
   exportData: async () => {
     const state = get()

@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo, useCallback, useRef } from "react"
 import {
   Search, Grid, List, Filter, Zap, Loader2, Moon, Sun, AlertTriangle, RefreshCw,
-  Settings2, Sparkles, ArrowUpDown, ChevronRight,
+  Settings2, Sparkles, ArrowUpDown, ChevronRight, Scale, Star,
 } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
@@ -46,7 +46,7 @@ function computeBestFitScore(model: ModelCard): number {
 
 export default function DashboardPage() {
   const router = useRouter()
-  const { specs, loadFromStorage, bookmarks, addBookmark, removeBookmark, filters, setFilters, hasEnteredSpecs } = useAppStore()
+  const { specs, loadFromStorage, bookmarks, addBookmark, removeBookmark, filters, setFilters, hasEnteredSpecs, compareList, clearCompare } = useAppStore()
   const { theme, setTheme } = useTheme()
   const [mounted, setMounted] = useState(false)
   const [searchInput, setSearchInput] = useState("")
@@ -231,6 +231,18 @@ export default function DashboardPage() {
             </div>
           )}
           <FilterSidebar />
+
+          {/* Quick links */}
+          <div className="space-y-1 pt-2 border-t border-border/50">
+            <Button variant="ghost" size="sm" className="w-full justify-start gap-2 h-8 text-xs" onClick={() => router.push("/bookmarks")}>
+              <Star className="w-3.5 h-3.5 text-amber-400" />Bookmarks
+              {bookmarks.length > 0 && <Badge variant="secondary" className="ml-auto text-[9px] px-1.5 py-0">{bookmarks.length}</Badge>}
+            </Button>
+            <Button variant="ghost" size="sm" className="w-full justify-start gap-2 h-8 text-xs" onClick={() => router.push("/compare")}>
+              <Scale className="w-3.5 h-3.5 text-primary" />Compare
+              {compareList.length > 0 && <Badge variant="secondary" className="ml-auto text-[9px] px-1.5 py-0">{compareList.length}/3</Badge>}
+            </Button>
+          </div>
         </div>
       </aside>
 
@@ -442,6 +454,27 @@ export default function DashboardPage() {
             </div>
           )}
         </main>
+
+        {/* Floating Compare Bar */}
+        {compareList.length > 0 && (
+          <div className="border-t bg-background/95 backdrop-blur-md px-4 py-2.5 flex items-center gap-3 shrink-0">
+            <Scale className="w-4 h-4 text-primary shrink-0" />
+            <div className="flex items-center gap-2 flex-1 min-w-0 overflow-x-auto">
+              {compareList.map((m) => (
+                <Badge key={m.modelId} variant="secondary" className="text-[10px] shrink-0 gap-1">
+                  {m.name || m.modelId.split("/").pop()}
+                </Badge>
+              ))}
+              <span className="text-[10px] text-muted-foreground shrink-0">{compareList.length}/3</span>
+            </div>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <Button variant="outline" size="sm" className="h-7 text-xs" onClick={clearCompare}>Clear</Button>
+              <Button size="sm" className="h-7 text-xs gap-1 bg-gradient-to-r from-emerald-500 to-cyan-500 text-white border-0" onClick={() => router.push("/compare")}>
+                <Scale className="w-3 h-3" />Compare {compareList.length}
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

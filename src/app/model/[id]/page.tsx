@@ -320,6 +320,121 @@ export default function ModelPage() {
                 )}
               </CardContent>
             </Card>
+
+            {/* Compatibility Breakdown */}
+            {specs && enriched.estimatedSizeGB && enriched.compatibility !== "unknown" && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <HardDrive className="w-4 h-4" />Compatibility breakdown
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {(() => {
+                    const memTotal = specs.vramGB || specs.ramGB
+                    const memLabel = specs.vramGB ? "VRAM" : "RAM"
+                    const headroom = memTotal - enriched.estimatedSizeGB
+                    const headroomPct = Math.round((headroom / memTotal) * 100)
+                    const usagePct = Math.min(100, Math.round((enriched.estimatedSizeGB / memTotal) * 100))
+                    const ctxOverhead = enriched.contextLength
+                      ? Math.min(enriched.estimatedSizeGB * 0.5, (enriched.contextLength / 1000) * 0.1 * (enriched.estimatedSizeGB / 4))
+                      : 0
+
+                    return (
+                      <>
+                        {/* Visual bar */}
+                        <div className="space-y-1.5">
+                          <div className="h-3 rounded-full bg-muted/60 overflow-hidden relative">
+                            <div
+                              className={`h-full rounded-full transition-all ${
+                                enriched.compatibility === "smooth" ? "bg-emerald-500" :
+                                enriched.compatibility === "slow" ? "bg-amber-500" : "bg-red-500"
+                              }`}
+                              style={{ width: `${usagePct}%` }}
+                            />
+                          </div>
+                          <div className="flex justify-between text-[10px] text-muted-foreground" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
+                            <span>0 GB</span>
+                            <span>{memTotal} GB {memLabel}</span>
+                          </div>
+                        </div>
+
+                        {/* Numbers */}
+                        <div className="space-y-2 text-[12px]">
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Model size</span>
+                            <span className="font-medium" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>{enriched.estimatedSizeGB.toFixed(1)} GB</span>
+                          </div>
+                          {ctxOverhead > 0 && (
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Context overhead (est.)</span>
+                              <span className="font-medium" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>~{ctxOverhead.toFixed(1)} GB</span>
+                            </div>
+                          )}
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Your {memLabel}</span>
+                            <span className="font-medium" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>{memTotal} GB</span>
+                          </div>
+                          <Separator />
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground font-medium">Headroom</span>
+                            <span className={`font-semibold ${headroom >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-500"}`} style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
+                              {headroom >= 0 ? `${headroom.toFixed(1)} GB (${headroomPct}%)` : `${Math.abs(headroom).toFixed(1)} GB over`}
+                            </span>
+                          </div>
+                        </div>
+                      </>
+                    )
+                  })()}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Quick Start Guide */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Zap className="w-4 h-4" />Quick start
+                </CardTitle>
+                <CardDescription>Get this model running in 3 steps</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-3">
+                  <div className="flex gap-3">
+                    <div className="w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">1</div>
+                    <div>
+                      <p className="text-sm font-medium">Install Ollama</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Download from{" "}
+                        <a href="https://ollama.com" target="_blank" rel="noopener noreferrer" className="text-primary underline underline-offset-2">ollama.com</a>
+                        {" "} — works on Mac, Windows, and Linux.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex gap-3">
+                    <div className="w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">2</div>
+                    <div>
+                      <p className="text-sm font-medium">Pull the model</p>
+                      <div className="flex items-center gap-2 mt-1 p-2 bg-muted/50 rounded-md">
+                        <code className="text-[11px] font-mono flex-1 break-all">{downloadCmdOllama}</code>
+                        <Button variant="ghost" size="sm" className="h-6 w-6 p-0 shrink-0" onClick={() => handleCopy(downloadCmdOllama, "ollama")}>
+                          {copiedOllama ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3 text-muted-foreground" />}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex gap-3">
+                    <div className="w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">3</div>
+                    <div>
+                      <p className="text-sm font-medium">Start chatting</p>
+                      <div className="flex items-center gap-2 mt-1 p-2 bg-muted/50 rounded-md">
+                        <code className="text-[11px] font-mono flex-1 break-all">{`ollama run ${enriched.name?.toLowerCase().replace(/[^\w]/g, "-") || "model-name"}`}</code>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           </div>
         </div>
       </div>
