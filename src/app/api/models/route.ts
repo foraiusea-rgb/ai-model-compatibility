@@ -30,19 +30,17 @@ export async function GET(request: NextRequest) {
     const pipeline_tag = searchParams.get("pipeline_tag") || undefined;
     const author = searchParams.get("author") || undefined;
 
-    // Validate sort
-    const validSorts = ["downloads", "likes", "lastModified", "createdAt", "trending"];
-    const hfSort = validSorts.includes(sort) ? sort : "downloads";
+const validSorts = ["downloads", "likes", "lastModified", "createdAt"];
+  const hfSort = validSorts.includes(sort) ? sort : "downloads";
 
-    const result = await searchHFModels({
-      limit,
-      offset,
-      search: q,
-      sort: hfSort as any,
-      direction: direction as -1 | 1,
-      pipeline_tag,
-      author,
-    });
+  const result = await searchHFModels({
+    limit,
+    offset,
+    search: q,
+    sort: hfSort as any,
+    direction,
+    filter: ["pipeline_tag:text-generation", "pipeline_tag:text-to-image", "pipeline_tag:text-to-speech"],
+  });
 
     // Convert HF responses to our internal format
     const models = result.models.map((m) => hfToInternal(m));
